@@ -4,6 +4,7 @@ import type { ConnectionManager } from '../services/connection-manager.js'
 import type { DumpManager } from '../services/dump-manager.js'
 import type { Storage } from '../lib/storage.js'
 import { SchemaIntrospector } from '../services/schema-introspector.js'
+import { quoteIdentifier } from '../utils/sql-escape.js'
 import { text, error } from '../lib/response.js'
 
 export function registerDumpTools(
@@ -54,7 +55,7 @@ export function registerDumpTools(
 
           for (const t of tables) {
             try {
-              const result = await driver.execute(`SELECT COUNT(*) as cnt FROM "${t.name}"`)
+              const result = await driver.execute(`SELECT COUNT(*) as cnt FROM ${quoteIdentifier(t.name, driver.type)}`)
               const cnt = Number(result.rows[0]?.cnt ?? 0)
               counts.push({ name: t.name, rows: cnt })
               totalRows += cnt

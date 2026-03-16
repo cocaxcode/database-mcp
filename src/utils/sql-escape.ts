@@ -38,7 +38,10 @@ export function quoteFn(dialect: string): (name: string) => string {
  */
 export function escapeValue(value: unknown): string {
   if (value === null || value === undefined) return 'NULL'
-  if (typeof value === 'number') return String(value)
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`Valor numerico invalido: ${value}`)
+    return String(value)
+  }
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
   if (value instanceof Date) return `'${value.toISOString()}'`
   // Objects and arrays (jsonb, json columns) — serialize as JSON string

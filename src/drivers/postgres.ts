@@ -55,9 +55,15 @@ export class PostgresAdapter implements DatabaseDriver {
       throw new Error('PostgreSQL requiere DSN o campos de conexion (host, database, user)')
     }
 
-    // Test connection
-    await (this.sql as { unsafe: (sql: string) => Promise<unknown> }).unsafe('SELECT 1')
-    this.connected = true
+    // Test connection — clean up on failure
+    try {
+      await (this.sql as { unsafe: (sql: string) => Promise<unknown> }).unsafe('SELECT 1')
+      this.connected = true
+    } catch (e) {
+      await (this.sql as { end: () => Promise<void> }).end().catch(() => {})
+      this.sql = null
+      throw e
+    }
   }
 
   async disconnect(): Promise<void> {

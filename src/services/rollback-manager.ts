@@ -58,9 +58,11 @@ export class RollbackManager {
           : `SELECT * FROM ${q} LIMIT 10000`
         const result = await driver.execute(selectSql)
         snap.affectedRows = result.rows
-      } catch {
-        // Si no se puede capturar, continuar sin pre-state
+      } catch (e) {
+        console.error(`database-mcp: rollback pre-capture failed for ${snap.type} on '${parsed.table}': ${e instanceof Error ? e.message : String(e)}`)
       }
+    } else if (snap.type === 'update' || snap.type === 'delete') {
+      console.error(`database-mcp: rollback skipped pre-capture — could not parse table from SQL: ${sql.substring(0, 120)}`)
     }
 
     const filePath = join(this.rollbackDir, `${id}.json`)
@@ -137,8 +139,8 @@ export class RollbackManager {
         const filePath = join(this.rollbackDir, `${id}.json`)
         await writeFile(filePath, JSON.stringify(snap, null, 2), 'utf-8')
       }
-    } catch {
-      // Si falla la captura post-insert, el rollback quedara sin datos
+    } catch (e) {
+      console.error(`database-mcp: rollback post-insert capture failed for '${snap.table}': ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

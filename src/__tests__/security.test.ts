@@ -78,6 +78,12 @@ describe('sql-escape', () => {
       const d = new Date('2024-01-01T00:00:00.000Z')
       expect(escapeValue(d)).toBe("'2024-01-01T00:00:00.000Z'")
     })
+
+    it('rechaza NaN e Infinity', () => {
+      expect(() => escapeValue(NaN)).toThrow('Valor numerico invalido')
+      expect(() => escapeValue(Infinity)).toThrow('Valor numerico invalido')
+      expect(() => escapeValue(-Infinity)).toThrow('Valor numerico invalido')
+    })
   })
 })
 

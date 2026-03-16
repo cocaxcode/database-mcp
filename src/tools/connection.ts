@@ -118,7 +118,11 @@ export function registerConnectionTools(
 
         const update: Record<string, unknown> = {}
         if (params.key === 'port') {
-          update[params.key] = parseInt(params.value, 10)
+          const port = parseInt(params.value, 10)
+          if (isNaN(port) || port < 1 || port > 65535) {
+            return error(`Puerto invalido: '${params.value}'. Debe ser un numero entre 1 y 65535.`)
+          }
+          update[params.key] = port
         } else {
           update[params.key] = params.value
         }

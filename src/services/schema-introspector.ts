@@ -36,9 +36,10 @@ export class SchemaIntrospector {
         throw new Error(`Dialecto no soportado: ${driver.type}`)
     }
 
-    // Filtrar por patron
+    // Filtrar por patron (escape regex metacharacters to prevent ReDoS)
     if (pattern) {
-      const regex = new RegExp(pattern.replace(/%/g, '.*').replace(/_/g, '.'), 'i')
+      const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(escaped.replace(/%/g, '.*').replace(/_/g, '.'), 'i')
       tables = tables.filter((t) => regex.test(t.name))
     }
 

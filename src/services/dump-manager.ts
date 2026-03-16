@@ -325,13 +325,50 @@ async function buildInserts(
   return { sql: inserts.join('\n'), rowCount: result.rows.length }
 }
 
+/**
+ * Splits SQL into statements respecting single-quoted strings.
+ * Handles escaped quotes ('') inside strings correctly.
+ */
 function splitStatements(sql: string): string[] {
-  return sql
-    .split('\n')
-    .filter((line) => !line.startsWith('--') && line.trim().length > 0)
-    .join('\n')
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map((s) => s + ';')
+  // Remove comment lines first
+  const lines = sql.split('\n').filter((line) => !line.startsWith('--') && line.trim().length > 0)
+  const cleaned = lines.join('\n')
+
+  const statements: string[] = []
+  let current = ''
+  let inString = false
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+
+    if (ch === "'" && !inString) {
+      inString = true
+      current += ch
+    } else if (ch === "'" && inString) {
+      // Check for escaped quote ('')
+      if (i + 1 < cleaned.length && cleaned[i + 1] === "'") {
+        current += "''"
+        i++ // skip next quote
+      } else {
+        inString = false
+        current += ch
+      }
+    } else if (ch === ';' && !inString) {
+      const trimmed = current.trim()
+      if (trimmed.length > 0) {
+        statements.push(trimmed + ';')
+      }
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+
+  // Handle last statement without trailing semicolon
+  const trimmed = current.trim()
+  if (trimmed.length > 0) {
+    statements.push(trimmed + ';')
+  }
+
+  return statements
 }
