@@ -6,12 +6,12 @@
     "url": "https://github.com/cocaxcode/database-mcp",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@cocaxcode/database-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtime": "node",
       "transport": {
         "type": "stdio"
