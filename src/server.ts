@@ -14,7 +14,7 @@ import { registerDumpTools } from './tools/dump.js'
 import { registerSchemaResources } from './resources/schema.js'
 import { ensureGitignore } from './utils/gitignore-checker.js'
 
-const VERSION = '0.1.7'
+const VERSION = '0.1.8'
 
 /**
  * Crea y configura el MCP server con todos los tools registrados.
