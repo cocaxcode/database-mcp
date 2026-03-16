@@ -292,4 +292,109 @@ export function registerConnectionTools(
       }
     },
   )
+
+  // ── conn_export ──
+  server.tool(
+    'conn_export',
+    'Exporta conexiones a JSON. Por defecto enmascara passwords — usa include_secrets=true para incluirlos.',
+    {
+      name: z.string().optional().describe('Nombre de una conexion especifica (omitir para exportar todas)'),
+      include_secrets: z.boolean().default(false).describe('Incluir passwords y DSNs sin enmascarar'),
+    },
+    async (params) => {
+      try {
+        let connections: Connection[]
+
+        if (params.name) {
+          const conn = await storage.getConnection(params.name)
+          if (!conn) return error(`Conexion '${params.name}' no encontrada`)
+          connections = [conn]
+        } else {
+          const items = await storage.listConnections()
+          if (items.length === 0) return text('No hay conexiones para exportar')
+
+          const all = await Promise.all(items.map((i) => storage.getConnection(i.name)))
+          connections = all.filter((c): c is Connection => c !== null)
+        }
+
+        // Enmascarar si no se piden secretos
+        const exported = connections.map((conn) => {
+          if (params.include_secrets) return conn
+          const safe = { ...conn }
+          if (safe.password) safe.password = '***'
+          if (safe.dsn) safe.dsn = safe.dsn.replace(/:([^@]+)@/, ':***@')
+          return safe
+        })
+
+        const bundle = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          connections: exported,
+        }
+
+        return text(JSON.stringify(bundle, null, 2))
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_import ──
+  server.tool(
+    'conn_import',
+    'Importa conexiones desde un JSON exportado. Omite conexiones que ya existen (usa overwrite=true para reemplazar).',
+    {
+      json: z.string().describe('JSON con las conexiones a importar (formato de conn_export)'),
+      overwrite: z.boolean().default(false).describe('Reemplazar conexiones existentes con el mismo nombre'),
+    },
+    async (params) => {
+      try {
+        const bundle = JSON.parse(params.json) as { connections?: Connection[] }
+        const connections = bundle.connections
+        if (!connections?.length) return error('No se encontraron conexiones en el JSON')
+
+        const results: string[] = []
+        let imported = 0
+        let skipped = 0
+
+        for (const conn of connections) {
+          if (!conn.name || !conn.type) {
+            results.push(`  Omitida: entrada sin nombre o tipo`)
+            skipped++
+            continue
+          }
+
+          const existing = await storage.getConnection(conn.name)
+
+          if (existing && !params.overwrite) {
+            results.push(`  Omitida: '${conn.name}' ya existe (usa overwrite=true para reemplazar)`)
+            skipped++
+            continue
+          }
+
+          // Si tiene passwords enmascarados, advertir
+          if (conn.password === '***' || conn.dsn?.includes(':***@')) {
+            results.push(`  Advertencia: '${conn.name}' tiene credenciales enmascaradas — edita con conn_set despues de importar`)
+          }
+
+          const now = new Date().toISOString()
+          if (existing) {
+            await storage.deleteConnection(conn.name)
+          }
+          await storage.createConnection({
+            ...conn,
+            createdAt: existing ? existing.createdAt : now,
+            updatedAt: now,
+          })
+          results.push(`  Importada: '${conn.name}' (${conn.type})`)
+          imported++
+        }
+
+        const summary = `${imported} importada(s), ${skipped} omitida(s)`
+        return text(`Importacion completada: ${summary}\n\n${results.join('\n')}`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
 }

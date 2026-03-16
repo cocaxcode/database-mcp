@@ -2,7 +2,7 @@
   <h1 align="center">@cocaxcode/database-mcp</h1>
   <p align="center">
     <strong>Talk to your databases in natural language.</strong><br/>
-    21 tools &middot; 3 databases &middot; Rollback &middot; Schema auto-discovery &middot; Zero config
+    23 tools &middot; 3 databases &middot; Rollback &middot; Schema auto-discovery &middot; Zero config
   </p>
 </p>
 
@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/@cocaxcode/database-mcp"><img src="https://img.shields.io/npm/dm/@cocaxcode/database-mcp.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tools-19-blueviolet?style=flat-square" alt="21 tools" />
+  <img src="https://img.shields.io/badge/tools-23-blueviolet?style=flat-square" alt="23 tools" />
   <img src="https://img.shields.io/badge/tests-88-brightgreen?style=flat-square" alt="88 tests" />
 </p>
 
@@ -375,6 +375,25 @@ Every query is logged per-project with timestamp, SQL, connection name, executio
 
 History is stored in `{project}/.database-mcp/history.json` (max 5000 entries, auto-truncated).
 
+### Export & Import Connections
+
+Share your database connections between machines or team members:
+
+```
+"Export all my connections"                     → JSON with masked passwords
+"Export connections with secrets included"       → JSON with real credentials
+"Export just the prod-api connection"            → single connection
+```
+
+Import on another machine:
+
+```
+"Import these connections: { ... }"             → creates missing connections
+"Import with overwrite"                         → replaces existing ones too
+```
+
+Passwords are masked by default in exports. Use `include_secrets=true` to include real credentials. After importing masked connections, update the passwords with `conn_set`.
+
 ### Connection Safety
 
 | Feature | How it works |
@@ -389,11 +408,11 @@ History is stored in `{project}/.database-mcp/history.json` (max 5000 entries, a
 
 ## Tool Reference
 
-21 tools organized in 6 categories:
+23 tools organized in 6 categories:
 
 | Category | Tools | Count |
 |----------|-------|-------|
-| **Connections** | `conn_create` `conn_list` `conn_get` `conn_set` `conn_switch` `conn_rename` `conn_delete` `conn_duplicate` `conn_test` `conn_project_list` `conn_project_clear` | 11 |
+| **Connections** | `conn_create` `conn_list` `conn_get` `conn_set` `conn_switch` `conn_rename` `conn_delete` `conn_duplicate` `conn_test` `conn_project_list` `conn_project_clear` `conn_export` `conn_import` | 13 |
 | **Schema** | `search_schema` | 1 |
 | **Queries** | `execute_query` `execute_mutation` `explain_query` | 3 |
 | **Rollback** | `rollback_list` `rollback_apply` | 2 |
