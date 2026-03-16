@@ -418,15 +418,32 @@ All connection data lives in `~/.database-mcp/` (user home directory) as plain J
     └── {project-hash}                    # Per-project active connection
 
 {your-project}/.database-mcp/            # Per-project (auto-added to .gitignore)
-├── history.json                          # Query history (5000 max)
-└── rollbacks.json                        # Pre-mutation snapshots (500 max)
+├── history.json                          # Query history (5000 max, configurable)
+└── rollbacks.json                        # Pre-mutation snapshots (1000 max, configurable)
 ```
 
-Override the global storage directory:
+### Environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `DATABASE_MCP_DIR` | Global storage directory | `~/.database-mcp/` |
+| `DATABASE_MCP_MAX_ROLLBACKS` | Max rollback snapshots per project | `1000` |
+| `DATABASE_MCP_MAX_HISTORY` | Max history entries per project | `5000` |
+
+Configure them in your MCP client:
 
 ```json
 {
-  "env": { "DATABASE_MCP_DIR": "/path/to/custom/.database-mcp" }
+  "mcpServers": {
+    "database": {
+      "command": "npx",
+      "args": ["-y", "@cocaxcode/database-mcp@latest"],
+      "env": {
+        "DATABASE_MCP_MAX_ROLLBACKS": "2000",
+        "DATABASE_MCP_MAX_HISTORY": "10000"
+      }
+    }
+  }
 }
 ```
 

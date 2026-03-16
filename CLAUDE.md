@@ -81,8 +81,8 @@ src/
     └── {project-hash}              # Per-project active connection
 
 {projectDir}/.database-mcp/         # Per-project (auto-gitignored)
-├── history.json                    # Query history (5000 max)
-└── rollbacks.json                  # Pre-mutation snapshots (500 max)
+├── history.json                    # Query history (DATABASE_MCP_MAX_HISTORY, default 5000)
+└── rollbacks.json                  # Pre-mutation snapshots (DATABASE_MCP_MAX_ROLLBACKS, default 1000)
 ```
 
 ## Commands

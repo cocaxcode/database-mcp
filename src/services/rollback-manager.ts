@@ -5,7 +5,7 @@ import type { RollbackSnapshot, QueryResult } from '../lib/types.js'
 import { extractTableAndWhere } from '../utils/sql-parser-light.js'
 import { classifySql } from '../utils/sql-classifier.js'
 
-const MAX_SNAPSHOTS = 1000
+const MAX_SNAPSHOTS = Number(process.env.DATABASE_MCP_MAX_ROLLBACKS) || 1000
 
 export class RollbackManager {
   private readonly rollbackDir: string

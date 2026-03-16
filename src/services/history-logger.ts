@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { HistoryEntry } from '../lib/types.js'
 import { checkGitignore } from '../utils/gitignore-checker.js'
 
-const MAX_ENTRIES = 5000
+const MAX_ENTRIES = Number(process.env.DATABASE_MCP_MAX_HISTORY) || 5000
 
 export class HistoryLogger {
   private readonly projectDir: string
