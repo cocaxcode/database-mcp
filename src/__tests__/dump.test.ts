@@ -44,11 +44,21 @@ describe('db_dump / db_restore / db_dump_list', () => {
     expect(res.isError).toBeFalsy()
   })
 
-  it('pregunta por tablas si no se pasan', async () => {
+  it('pregunta por tablas con conteo de filas en modo full', async () => {
     const res = await callTool(ctx.client, 'db_dump', { mode: 'full' })
     expect(res.text).toContain('Tablas disponibles')
     expect(res.text).toContain('users')
     expect(res.text).toContain('posts')
+    expect(res.text).toContain('filas')
+    expect(res.text).toContain('filas en total')
+    expect(res.isError).toBeFalsy()
+  })
+
+  it('pregunta por tablas sin conteo en modo schema', async () => {
+    const res = await callTool(ctx.client, 'db_dump', { mode: 'schema' })
+    expect(res.text).toContain('Tablas disponibles')
+    expect(res.text).toContain('users')
+    expect(res.text).not.toContain('filas')
     expect(res.isError).toBeFalsy()
   })
 

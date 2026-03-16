@@ -62,6 +62,37 @@ export function registerDumpTools(
             return error('No se encontraron tablas en la base de datos')
           }
 
+          // En modo full, mostrar conteo de filas por tabla
+          if (params.mode === 'full') {
+            const counts: { name: string; rows: number }[] = []
+            let totalRows = 0
+
+            for (const t of tables) {
+              try {
+                const result = await driver.execute(`SELECT COUNT(*) as cnt FROM "${t.name}"`)
+                const cnt = Number(result.rows[0]?.cnt ?? 0)
+                counts.push({ name: t.name, rows: cnt })
+                totalRows += cnt
+              } catch {
+                counts.push({ name: t.name, rows: -1 })
+              }
+            }
+
+            const maxNameLen = Math.max(...counts.map((c) => c.name.length))
+            const tableList = counts.map((c) => {
+              const rowsStr = c.rows >= 0 ? `${c.rows.toLocaleString()} filas` : 'error al contar'
+              return `  - ${c.name.padEnd(maxNameLen)}  (${rowsStr})`
+            }).join('\n')
+
+            return text(
+              `Tablas disponibles (${tables.length}, ${totalRows.toLocaleString()} filas en total):\n\n${tableList}\n\n` +
+              'Que quieres exportar?\n\n' +
+              `1. **Todas las tablas** → llama db_dump con mode="full" y all_tables=true\n` +
+              `2. **Solo algunas** → llama db_dump con mode="full" y tables=["tabla1", "tabla2"]\n`,
+            )
+          }
+
+          // En modo schema, solo nombres
           const tableList = tables.map((t) => `  - ${t.name}`).join('\n')
 
           return text(
