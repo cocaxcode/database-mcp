@@ -4,6 +4,10 @@ import type { DatabaseDriver } from '../drivers/interface.js'
 import type { RollbackSnapshot, QueryResult } from '../lib/types.js'
 import { extractTableAndWhere } from '../utils/sql-parser-light.js'
 import { classifySql } from '../utils/sql-classifier.js'
+import { escapeValue, quoteIdentifier, assertSafeIdentifier } from '../utils/sql-escape.js'
+import { assertSafePath } from '../utils/path-guard.js'
+
+const SNAPSHOT_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/
 
 export class RollbackManager {
   private readonly rollbackDir: string
@@ -47,9 +51,11 @@ export class RollbackManager {
     // Capturar filas afectadas para UPDATE y DELETE (pre-mutation state)
     if (parsed?.table && (snap.type === 'update' || snap.type === 'delete')) {
       try {
+        assertSafeIdentifier(parsed.table, 'tabla')
+        const q = quoteIdentifier(parsed.table, driver.type)
         const selectSql = parsed.where
-          ? `SELECT * FROM "${parsed.table}" WHERE ${parsed.where}`
-          : `SELECT * FROM "${parsed.table}"`
+          ? `SELECT * FROM ${q} WHERE ${parsed.where} LIMIT 10000`
+          : `SELECT * FROM ${q} LIMIT 10000`
         const result = await driver.execute(selectSql)
         snap.affectedRows = result.rows
       } catch {
@@ -81,45 +87,46 @@ export class RollbackManager {
       const parsed = extractTableAndWhere(snap.sql)
       if (!parsed?.table) return
 
+      assertSafeIdentifier(parsed.table, 'tabla')
+      const q = quoteIdentifier(parsed.table, driver.type)
+
       // Estrategia: obtener la ultima fila insertada
-      // Para SQLite: last_insert_rowid()
-      // Para PostgreSQL/MySQL: usar ORDER BY + LIMIT para obtener las filas mas recientes
       let insertedRows: Record<string, unknown>[] = []
 
       if (driver.type === 'sqlite') {
         const lastId = await driver.execute('SELECT last_insert_rowid() as id')
         const rowId = lastId.rows[0]?.id
         if (rowId !== undefined) {
-          const result = await driver.execute(`SELECT * FROM "${parsed.table}" WHERE rowid = ${rowId}`)
+          const result = await driver.execute(`SELECT * FROM ${q} WHERE rowid = ?`, [rowId])
           insertedRows = result.rows
         }
       } else if (driver.type === 'postgresql') {
-        // Para PG, intentar obtener por ctid (ultima fila)
-        // Alternativa mas segura: buscar el max ID
         const cols = await driver.execute(
           `SELECT column_name FROM information_schema.columns WHERE table_name = '${parsed.table}' AND table_schema = 'public' ORDER BY ordinal_position LIMIT 1`,
         )
         const firstCol = (cols.rows[0]?.column_name as string) ?? 'id'
+        assertSafeIdentifier(firstCol, 'columna')
+        const colQ = quoteIdentifier(firstCol, driver.type)
         const result = await driver.execute(
-          `SELECT * FROM "${parsed.table}" ORDER BY "${firstCol}" DESC LIMIT 1`,
+          `SELECT * FROM ${q} ORDER BY ${colQ} DESC LIMIT 1`,
         )
         insertedRows = result.rows
       } else if (driver.type === 'mysql') {
         const lastId = await driver.execute('SELECT LAST_INSERT_ID() as id')
         const rowId = lastId.rows[0]?.id
         if (rowId !== undefined && Number(rowId) > 0) {
-          // MySQL LAST_INSERT_ID devuelve 0 si no hay auto-increment
-          const result = await driver.execute(`SELECT * FROM \`${parsed.table}\` WHERE id = ${rowId}`)
+          const result = await driver.execute(`SELECT * FROM ${q} WHERE id = ?`, [rowId])
           insertedRows = result.rows
         }
         if (!insertedRows.length) {
-          // Fallback: ultima fila
           const cols = await driver.execute(
             `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = '${parsed.table}' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION LIMIT 1`,
           )
           const firstCol = ((cols.rows[0]?.COLUMN_NAME ?? cols.rows[0]?.column_name) as string) ?? 'id'
+          assertSafeIdentifier(firstCol, 'columna')
+          const colQ = quoteIdentifier(firstCol, driver.type)
           const result = await driver.execute(
-            `SELECT * FROM \`${parsed.table}\` ORDER BY \`${firstCol}\` DESC LIMIT 1`,
+            `SELECT * FROM ${q} ORDER BY ${colQ} DESC LIMIT 1`,
           )
           insertedRows = result.rows
         }
@@ -171,7 +178,12 @@ export class RollbackManager {
    */
   async get(id: string): Promise<RollbackSnapshot | null> {
     try {
-      const content = await readFile(join(this.rollbackDir, `${id}.json`), 'utf-8')
+      // Validate ID format to prevent path traversal
+      if (!SNAPSHOT_ID_PATTERN.test(id)) {
+        return null
+      }
+      const filePath = assertSafePath(this.rollbackDir, `${id}.json`)
+      const content = await readFile(filePath, 'utf-8')
       return JSON.parse(content) as RollbackSnapshot
     } catch {
       return null
@@ -193,7 +205,7 @@ export class RollbackManager {
       )
     }
 
-    const reverseSql = this.generateReverseSql(snap)
+    const reverseSql = this.generateReverseSql(snap, driver.type)
     if (!reverseSql.length) {
       throw new Error('No se puede generar SQL inverso para este rollback (sin datos suficientes)')
     }
@@ -217,8 +229,16 @@ export class RollbackManager {
   /**
    * Genera el SQL inverso para un snapshot.
    */
-  generateReverseSql(snap: RollbackSnapshot): string[] {
+  generateReverseSql(snap: RollbackSnapshot, dialect = 'postgresql'): string[] {
     if (!snap.table) return []
+
+    try {
+      assertSafeIdentifier(snap.table, 'tabla')
+    } catch {
+      return []
+    }
+
+    const tbl = quoteIdentifier(snap.table, dialect)
 
     switch (snap.type) {
       case 'insert':
@@ -226,9 +246,9 @@ export class RollbackManager {
         if (!snap.insertedRows?.length) return []
         return snap.insertedRows.map((row) => {
           const columns = Object.keys(row)
-          // Usar primera columna como PK (heuristica)
           const pkCol = columns[0]
-          return `DELETE FROM "${snap.table}" WHERE "${pkCol}" = ${escapeValue(row[pkCol])}`
+          const pkQ = quoteIdentifier(pkCol, dialect)
+          return `DELETE FROM ${tbl} WHERE ${pkQ} = ${escapeValue(row[pkCol])}`
         })
 
       case 'delete':
@@ -236,8 +256,9 @@ export class RollbackManager {
         if (!snap.affectedRows?.length) return []
         return snap.affectedRows.map((row) => {
           const columns = Object.keys(row)
-          const values = columns.map((c) => escapeValue(row[c]))
-          return `INSERT INTO "${snap.table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${values.join(', ')})`
+          const colNames = columns.map((c) => quoteIdentifier(c, dialect)).join(', ')
+          const values = columns.map((c) => escapeValue(row[c])).join(', ')
+          return `INSERT INTO ${tbl} (${colNames}) VALUES (${values})`
         })
 
       case 'update':
@@ -245,12 +266,12 @@ export class RollbackManager {
         if (!snap.affectedRows?.length) return []
         return snap.affectedRows.map((row) => {
           const columns = Object.keys(row)
-          // Intentar usar la PK para el WHERE (primer campo como heuristica)
           const pkCol = columns[0]
+          const pkQ = quoteIdentifier(pkCol, dialect)
           const setClauses = columns
             .filter((c) => c !== pkCol)
-            .map((c) => `"${c}" = ${escapeValue(row[c])}`)
-          return `UPDATE "${snap.table}" SET ${setClauses.join(', ')} WHERE "${pkCol}" = ${escapeValue(row[pkCol])}`
+            .map((c) => `${quoteIdentifier(c, dialect)} = ${escapeValue(row[c])}`)
+          return `UPDATE ${tbl} SET ${setClauses.join(', ')} WHERE ${pkQ} = ${escapeValue(row[pkCol])}`
         })
 
       default:
@@ -281,15 +302,4 @@ export class RollbackManager {
       // Ignorar errores de truncado
     }
   }
-}
-
-function escapeValue(value: unknown): string {
-  if (value === null || value === undefined) return 'NULL'
-  if (typeof value === 'number') return String(value)
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
-  if (value instanceof Date) return `'${value.toISOString()}'`
-  // Objects and arrays (jsonb, json columns) — serialize as JSON string
-  if (typeof value === 'object') return `'${JSON.stringify(value).replace(/'/g, "''")}'`
-  // Strings — escape single quotes
-  return `'${String(value).replace(/'/g, "''")}'`
 }

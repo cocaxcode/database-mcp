@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, unlink } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, readdir, unlink, chmod } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { sanitizeName } from './sanitize.js'
@@ -233,8 +233,8 @@ export class Storage {
     const saved = (await this.readJson<Partial<ServerConfig>>(this.configFile)) ?? {}
 
     return {
-      maxRollbacks: Number(process.env.DATABASE_MCP_MAX_ROLLBACKS) || saved.maxRollbacks || DEFAULT_CONFIG.maxRollbacks,
-      maxHistory: Number(process.env.DATABASE_MCP_MAX_HISTORY) || saved.maxHistory || DEFAULT_CONFIG.maxHistory,
+      maxRollbacks: parsePositiveInt(process.env.DATABASE_MCP_MAX_ROLLBACKS) ?? saved.maxRollbacks ?? DEFAULT_CONFIG.maxRollbacks,
+      maxHistory: parsePositiveInt(process.env.DATABASE_MCP_MAX_HISTORY) ?? saved.maxHistory ?? DEFAULT_CONFIG.maxHistory,
     }
   }
 
@@ -264,6 +264,14 @@ export class Storage {
 
   private async writeJson(filePath: string, data: unknown): Promise<void> {
     await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+    // Restrict file permissions for connection files (may contain secrets)
+    if (filePath.includes('connections')) {
+      try {
+        await chmod(filePath, 0o600)
+      } catch {
+        // chmod not supported on Windows, ignore
+      }
+    }
   }
 
   private async listJsonFiles(dir: string): Promise<string[]> {
@@ -274,4 +282,15 @@ export class Storage {
       return []
     }
   }
+}
+
+/** Parse a string as a positive integer, returning undefined if invalid or <= 0 */
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const n = parseInt(value, 10)
+  if (isNaN(n) || n <= 0) {
+    console.error(`database-mcp: valor de configuracion invalido: "${value}" (se esperaba un entero positivo)`)
+    return undefined
+  }
+  return n
 }

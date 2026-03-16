@@ -7,9 +7,7 @@ import type { Storage } from '../lib/storage.js'
 import { executeRead, executeMutation, executeExplain } from '../services/query-executor.js'
 import { classifySql } from '../utils/sql-classifier.js'
 import { formatQueryResult } from '../utils/result-formatter.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerQueryTools(
   server: McpServer,

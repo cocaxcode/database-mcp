@@ -3,9 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ConnectionManager } from '../services/connection-manager.js'
 import { SchemaIntrospector } from '../services/schema-introspector.js'
 import type { DetailLevel } from '../lib/types.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerSchemaTools(
   server: McpServer,

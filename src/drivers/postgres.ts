@@ -99,6 +99,10 @@ export class PostgresAdapter implements DatabaseDriver {
     } catch (error) {
       const executionTimeMs = Math.round(performance.now() - start)
       const message = error instanceof Error ? error.message : String(error)
+      // Detect connection-level errors and mark as disconnected
+      if (message.includes('CONNECTION') || message.includes('connection') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
+        this.connected = false
+      }
       throw new Error(`Error SQL (${executionTimeMs}ms): ${message}`)
     }
   }

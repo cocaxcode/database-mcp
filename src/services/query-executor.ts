@@ -73,16 +73,40 @@ export async function executeExplain(
 
 /**
  * Inyecta o ajusta LIMIT en una consulta SELECT.
+ * Skips injection for set operations (UNION, EXCEPT, INTERSECT) and FETCH FIRST.
  */
 function injectLimit(sql: string, limit: number): string {
   const trimmed = sql.trim().replace(/;$/, '')
+  const upper = trimmed.toUpperCase()
 
-  // Buscar LIMIT existente
-  const limitMatch = trimmed.match(/\bLIMIT\s+(\d+)/i)
+  // Don't inject LIMIT on set operations (UNION, EXCEPT, INTERSECT) — could break semantics
+  if (/\b(UNION|EXCEPT|INTERSECT)\b/i.test(trimmed)) {
+    return trimmed
+  }
+
+  // Handle FETCH FIRST (SQL standard, used in PG)
+  if (/\bFETCH\s+(FIRST|NEXT)\b/i.test(upper)) {
+    return trimmed
+  }
+
+  // Handle LIMIT ALL (PostgreSQL)
+  if (/\bLIMIT\s+ALL\b/i.test(upper)) {
+    return trimmed.replace(/\bLIMIT\s+ALL\b/i, `LIMIT ${limit}`)
+  }
+
+  // Buscar LIMIT existente (only at the outermost level — after last closing paren)
+  const lastParen = trimmed.lastIndexOf(')')
+  const searchArea = lastParen >= 0 ? trimmed.slice(lastParen) : trimmed
+  const limitMatch = searchArea.match(/\bLIMIT\s+(\d+)/i)
+
   if (limitMatch) {
     const existingLimit = parseInt(limitMatch[1], 10)
     const effectiveLimit = Math.min(existingLimit, limit)
-    return trimmed.replace(/\bLIMIT\s+\d+/i, `LIMIT ${effectiveLimit}`)
+    // Replace in the full string at the correct position
+    const idx = lastParen >= 0
+      ? lastParen + (searchArea.indexOf(limitMatch[0]))
+      : trimmed.indexOf(limitMatch[0])
+    return trimmed.slice(0, idx) + `LIMIT ${effectiveLimit}` + trimmed.slice(idx + limitMatch[0].length)
   }
 
   // No hay LIMIT, inyectar

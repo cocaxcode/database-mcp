@@ -1,8 +1,10 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseDriver } from '../drivers/interface.js'
 import { SchemaIntrospector } from './schema-introspector.js'
 import type { TableInfo, ColumnInfo } from '../lib/types.js'
+import { escapeValue, quoteIdentifier, assertSafeIdentifier } from '../utils/sql-escape.js'
+import { assertSafePath } from '../utils/path-guard.js'
 
 export interface DumpOptions {
   /** Incluir estructura (CREATE TABLE, indices, FKs) */
@@ -22,6 +24,9 @@ export interface DumpResult {
   totalRows: number
   sizeBytes: number
 }
+
+/** Max rows per table in data dump to prevent OOM */
+const MAX_DUMP_ROWS = 500_000
 
 export class DumpManager {
   private readonly dumpDir: string
@@ -109,7 +114,8 @@ export class DumpManager {
    * Restaura un dump SQL en la base de datos.
    */
   async restore(driver: DatabaseDriver, filename: string): Promise<{ statements: number; errors: string[] }> {
-    const filepath = join(this.dumpDir, filename)
+    // Path traversal protection
+    const filepath = assertSafePath(this.dumpDir, filename)
     const content = await readFile(filepath, 'utf-8')
 
     const statements = splitStatements(content)
@@ -139,12 +145,15 @@ export class DumpManager {
       for (const file of files) {
         if (!file.endsWith('.sql')) continue
         const filepath = join(this.dumpDir, file)
-        const content = await readFile(filepath, 'utf-8')
-        const sizeBytes = Buffer.byteLength(content, 'utf-8')
+        // Use fs.stat instead of reading entire file for size
+        const stats = await stat(filepath)
+        const sizeBytes = stats.size
 
         // Extraer fecha del nombre: name-YYYY-MM-DDTHH-MM-SS-mode.sql
-        const match = file.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/)
-        const createdAt = match ? match[1].replace(/T/, ' ').replace(/-/g, (_m, offset) => offset > 9 ? ':' : '-') : 'unknown'
+        const match = file.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/)
+        const createdAt = match
+          ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`
+          : 'unknown'
 
         dumps.push({ filename: file, sizeBytes, createdAt })
       }
@@ -208,13 +217,16 @@ function buildEnableFKs(dialect: string): string {
 }
 
 async function buildCreateTable(driver: DatabaseDriver, table: TableInfo): Promise<string> {
+  const q = (n: string) => quoteIdentifier(n, driver.type)
+
   // Para SQLite, usar sqlite_master que tiene el DDL exacto
   if (driver.type === 'sqlite') {
+    assertSafeIdentifier(table.name, 'tabla')
     const result = await driver.execute(
       `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table.name}'`,
     )
     if (result.rows.length > 0 && result.rows[0].sql) {
-      return `-- Tabla: ${table.name}\nDROP TABLE IF EXISTS "${table.name}";\n${result.rows[0].sql as string};`
+      return `-- Tabla: ${table.name}\nDROP TABLE IF EXISTS ${q(table.name)};\n${result.rows[0].sql as string};`
     }
   }
 
@@ -223,18 +235,16 @@ async function buildCreateTable(driver: DatabaseDriver, table: TableInfo): Promi
   const fks = table.foreignKeys ?? []
   const indexes = table.indexes ?? []
 
-  const quoteFn = driver.type === 'mysql' ? (n: string) => `\`${n}\`` : (n: string) => `"${n}"`
-  const tableName = quoteFn(table.name)
+  const tableName = q(table.name)
 
   const lines: string[] = []
 
   // Columnas
   for (const col of columns) {
-    const parts: string[] = [quoteFn(col.name)]
+    const parts: string[] = [q(col.name)]
     parts.push(mapColumnType(driver.type, col))
     if (!col.nullable) parts.push('NOT NULL')
     if (col.defaultValue !== undefined && col.defaultValue !== null) {
-      // Filtrar defaults auto-generados como nextval() para PKs
       if (!col.isPrimaryKey || !col.defaultValue.includes('nextval')) {
         parts.push(`DEFAULT ${col.defaultValue}`)
       }
@@ -245,12 +255,12 @@ async function buildCreateTable(driver: DatabaseDriver, table: TableInfo): Promi
   // Primary key
   const pkCols = columns.filter((c) => c.isPrimaryKey)
   if (pkCols.length > 0) {
-    lines.push(`  PRIMARY KEY (${pkCols.map((c) => quoteFn(c.name)).join(', ')})`)
+    lines.push(`  PRIMARY KEY (${pkCols.map((c) => q(c.name)).join(', ')})`)
   }
 
   // Foreign keys
   for (const fk of fks) {
-    lines.push(`  FOREIGN KEY (${quoteFn(fk.column)}) REFERENCES ${quoteFn(fk.referencedTable)}(${quoteFn(fk.referencedColumn)})`)
+    lines.push(`  FOREIGN KEY (${q(fk.column)}) REFERENCES ${q(fk.referencedTable)}(${q(fk.referencedColumn)})`)
   }
 
   const dropStmt = driver.type === 'mysql'
@@ -264,7 +274,7 @@ async function buildCreateTable(driver: DatabaseDriver, table: TableInfo): Promi
     .filter((idx) => !idx.name.includes('pkey') && !idx.name.includes('PRIMARY'))
     .map((idx) => {
       const unique = idx.unique ? 'UNIQUE ' : ''
-      return `CREATE ${unique}INDEX ${quoteFn(idx.name)} ON ${tableName} (${idx.columns.map(quoteFn).join(', ')});`
+      return `CREATE ${unique}INDEX ${q(idx.name)} ON ${tableName} (${idx.columns.map(q).join(', ')});`
     })
 
   return [
@@ -276,15 +286,12 @@ async function buildCreateTable(driver: DatabaseDriver, table: TableInfo): Promi
 }
 
 function mapColumnType(dialect: string, col: ColumnInfo): string {
-  // Usar el tipo original — es lo que vino de information_schema
   const t = col.type.toUpperCase()
 
-  // Para PostgreSQL auto-increment
   if (dialect === 'postgresql' && col.isPrimaryKey && (t === 'INTEGER' || t === 'INT' || t === 'BIGINT')) {
     return t === 'BIGINT' ? 'BIGSERIAL' : 'SERIAL'
   }
 
-  // Para MySQL auto-increment
   if (dialect === 'mysql' && col.isPrimaryKey && (t === 'INT' || t === 'INTEGER' || t === 'BIGINT')) {
     return `${col.type} AUTO_INCREMENT`
   }
@@ -296,18 +303,19 @@ async function buildInserts(
   driver: DatabaseDriver,
   table: TableInfo,
 ): Promise<{ sql: string; rowCount: number }> {
-  // Leer todos los datos sin limite
-  const result = await driver.execute(`SELECT * FROM "${table.name}"`)
+  const q = (n: string) => quoteIdentifier(n, driver.type)
+  const tableName = q(table.name)
+
+  // Read data with limit to prevent OOM
+  const result = await driver.execute(`SELECT * FROM ${tableName} LIMIT ${MAX_DUMP_ROWS}`)
 
   if (result.rows.length === 0) {
     return { sql: `-- ${table.name}: sin datos`, rowCount: 0 }
   }
 
-  const quoteFn = driver.type === 'mysql' ? (n: string) => `\`${n}\`` : (n: string) => `"${n}"`
-  const tableName = quoteFn(table.name)
-  const columns = result.columns.map(quoteFn).join(', ')
+  const columns = result.columns.map(q).join(', ')
 
-  const inserts: string[] = [`-- Datos: ${table.name} (${result.rows.length} filas)`]
+  const inserts: string[] = [`-- Datos: ${table.name} (${result.rows.length} filas${result.rows.length >= MAX_DUMP_ROWS ? ' — TRUNCADO' : ''})`]
 
   for (const row of result.rows) {
     const values = result.columns.map((col) => escapeValue(row[col])).join(', ')
@@ -315,16 +323,6 @@ async function buildInserts(
   }
 
   return { sql: inserts.join('\n'), rowCount: result.rows.length }
-}
-
-function escapeValue(val: unknown): string {
-  if (val === null || val === undefined) return 'NULL'
-  if (typeof val === 'number') return String(val)
-  if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE'
-  if (val instanceof Date) return `'${val.toISOString()}'`
-  if (typeof val === 'object') return `'${JSON.stringify(val).replace(/'/g, "''")}'`
-  // String
-  return `'${String(val).replace(/'/g, "''")}'`
 }
 
 function splitStatements(sql: string): string[] {

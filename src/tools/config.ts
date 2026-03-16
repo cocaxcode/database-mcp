@@ -4,9 +4,7 @@ import type { Storage } from '../lib/storage.js'
 import type { RollbackManager } from '../services/rollback-manager.js'
 import type { HistoryLogger } from '../services/history-logger.js'
 import { DEFAULT_CONFIG } from '../lib/types.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerConfigTools(
   server: McpServer,

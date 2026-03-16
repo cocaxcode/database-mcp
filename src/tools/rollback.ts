@@ -2,9 +2,7 @@ import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { RollbackManager } from '../services/rollback-manager.js'
 import type { ConnectionManager } from '../services/connection-manager.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerRollbackTools(
   server: McpServer,
@@ -67,7 +65,8 @@ export function registerRollbackTools(
           )
         }
 
-        const reverseSql = rollbackMgr.generateReverseSql(snap)
+        const driver = await manager.getActiveDriver()
+        const reverseSql = rollbackMgr.generateReverseSql(snap, driver.type)
         if (!reverseSql.length) {
           return error('No se puede generar SQL inverso para este rollback (sin datos suficientes)')
         }
@@ -78,7 +77,6 @@ export function registerRollbackTools(
           return text(`Revertir ${snap.type} en '${snap.table}'?\n\nSQL a ejecutar:\n${preview}${more}\n\nLlama rollback_apply con confirm=true para ejecutar.`)
         }
 
-        const driver = await manager.getActiveDriver()
         const result = await rollbackMgr.apply(params.id, driver)
 
         return text(`Rollback aplicado: ${reverseSql.length} sentencia(s) ejecutada(s). ${result.affectedRows ?? 0} fila(s) afectada(s).`)

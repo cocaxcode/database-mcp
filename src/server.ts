@@ -14,7 +14,7 @@ import { registerDumpTools } from './tools/dump.js'
 import { registerSchemaResources } from './resources/schema.js'
 import { ensureGitignore } from './utils/gitignore-checker.js'
 
-const VERSION = '0.1.0'
+const VERSION = '0.1.7'
 
 /**
  * Crea y configura el MCP server con todos los tools registrados.
@@ -35,7 +35,9 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   const dumpMgr = new DumpManager(effectiveProjectDir)
 
   // Asegurar que .database-mcp/ esta en .gitignore del proyecto
-  ensureGitignore(effectiveProjectDir).catch(() => {})
+  ensureGitignore(effectiveProjectDir).catch((e) => {
+    console.error(`database-mcp: no se pudo actualizar .gitignore: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
   // Cargar config y aplicar limites
   const applyConfig = async () => {

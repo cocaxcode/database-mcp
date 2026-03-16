@@ -46,8 +46,14 @@ export class MySQLAdapter implements DatabaseDriver {
       throw new Error('MySQL requiere DSN o campos de conexion (host, database, user)')
     }
 
-    // Test connection
-    await (this.connection as { execute: (sql: string) => Promise<unknown> }).execute('SELECT 1')
+    // Test connection — close if test fails to prevent leak
+    try {
+      await (this.connection as { execute: (sql: string) => Promise<unknown> }).execute('SELECT 1')
+    } catch (e) {
+      await (this.connection as { end: () => Promise<void> }).end().catch(() => {})
+      this.connection = null
+      throw e
+    }
   }
 
   async disconnect(): Promise<void> {

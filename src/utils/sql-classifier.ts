@@ -26,8 +26,15 @@ export function classifySql(sql: string): SqlType {
   const ddlKeywords = ['CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'RENAME']
   if (ddlKeywords.includes(keyword)) return 'ddl'
 
+  // WITH (CTE) — check body for DML keywords to prevent read-only bypass
+  if (keyword === 'WITH') {
+    const dmlPattern = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i
+    if (dmlPattern.test(cleaned)) return 'write'
+    return 'read'
+  }
+
   // Read
-  const readKeywords = ['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN', 'PRAGMA', 'WITH']
+  const readKeywords = ['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN', 'PRAGMA']
   if (readKeywords.includes(keyword)) return 'read'
 
   // Write

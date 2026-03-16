@@ -4,9 +4,7 @@ import type { Storage } from '../lib/storage.js'
 import type { ConnectionManager } from '../services/connection-manager.js'
 import type { Connection, ConnectionType, ConnectionMode } from '../lib/types.js'
 import { resolveDriver } from '../drivers/registry.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerConnectionTools(
   server: McpServer,
@@ -111,6 +109,11 @@ export function registerConnectionTools(
         const validKeys = ['host', 'port', 'database', 'user', 'password', 'dsn', 'filepath', 'mode']
         if (!validKeys.includes(params.key)) {
           return error(`Campo invalido '${params.key}'. Campos validos: ${validKeys.join(', ')}`)
+        }
+
+        // Validar valor de mode
+        if (params.key === 'mode' && params.value !== 'read-only' && params.value !== 'read-write') {
+          return error(`Valor invalido para mode: '${params.value}'. Valores validos: read-only, read-write`)
         }
 
         const update: Record<string, unknown> = {}
@@ -332,7 +335,10 @@ export function registerConnectionTools(
           connections: exported,
         }
 
-        return text(JSON.stringify(bundle, null, 2))
+        const warning = params.include_secrets
+          ? '\n\n⚠ ATENCION: Este export incluye passwords y DSNs sin enmascarar. No lo compartas ni lo incluyas en logs.'
+          : ''
+        return text(JSON.stringify(bundle, null, 2) + warning)
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))
       }

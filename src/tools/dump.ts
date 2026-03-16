@@ -4,9 +4,7 @@ import type { ConnectionManager } from '../services/connection-manager.js'
 import type { DumpManager } from '../services/dump-manager.js'
 import type { Storage } from '../lib/storage.js'
 import { SchemaIntrospector } from '../services/schema-introspector.js'
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const error = (t: string) => ({ content: [{ type: 'text' as const, text: `Error: ${t}` }], isError: true as const })
+import { text, error } from '../lib/response.js'
 
 export function registerDumpTools(
   server: McpServer,
