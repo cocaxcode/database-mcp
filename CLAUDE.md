@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history. 23 tools, 88 tests.
+MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 26 tools, 98 tests.
 
 ## Stack
 
@@ -20,12 +20,13 @@ src/
 ├── index.ts              # Entry point (shebang + StdioServerTransport, --dsn flag)
 ├── server.ts             # createServer(storageDir?, projectDir?) factory
 ├── tools/                # MCP tool registration (one file per group)
-│   ├── connection.ts     # conn_create/list/get/set/switch/rename/delete/duplicate/test/project_list/project_clear (11)
+│   ├── connection.ts     # conn_create/list/get/set/switch/rename/delete/duplicate/test/project_list/project_clear/export/import (13)
 │   ├── schema.ts         # search_schema (1)
 │   ├── query.ts          # execute_query/execute_mutation/explain_query (3)
 │   ├── rollback.ts       # rollback_list/rollback_apply (2)
 │   ├── history.ts        # history_list/history_clear (2)
-│   └── config.ts         # config_get/config_set (2)
+│   ├── config.ts         # config_get/config_set (2)
+│   └── dump.ts           # db_dump/db_restore/db_dump_list (3)
 ├── resources/
 │   └── schema.ts         # MCP Resources: db://schema, db://tables/{tableName}/schema
 ├── services/             # Business logic with DB interaction
@@ -33,7 +34,8 @@ src/
 │   ├── schema-introspector.ts # Multi-dialect schema queries (3 detail levels)
 │   ├── query-executor.ts      # Read (LIMIT injection), mutation (mode check), explain
 │   ├── rollback-manager.ts    # Pre-mutation snapshots, reverse SQL generation
-│   └── history-logger.ts      # Per-project query history (5000 max)
+│   ├── history-logger.ts      # Per-project query history (5000 max)
+│   └── dump-manager.ts        # Database dump/restore (SQL generation, multi-dialect)
 ├── drivers/              # Database adapters (dynamic import)
 │   ├── interface.ts      # DatabaseDriver interface
 │   ├── sqlite.ts         # sql.js adapter (:memory: + file)
@@ -83,13 +85,15 @@ src/
 
 {projectDir}/.database-mcp/         # Per-project (auto-gitignored)
 ├── history.json                    # Query history (DATABASE_MCP_MAX_HISTORY, default 5000)
-└── rollbacks.json                  # Pre-mutation snapshots (DATABASE_MCP_MAX_ROLLBACKS, default 1000)
+├── rollbacks.json                  # Pre-mutation snapshots (DATABASE_MCP_MAX_ROLLBACKS, default 1000)
+└── dumps/                          # Database dumps (SQL files)
+    └── {conn}-{timestamp}-{mode}.sql
 ```
 
 ## Commands
 
 ```bash
-npm test          # Run all tests (88)
+npm test          # Run all tests (98)
 npm run build     # Build with tsup
 npm run typecheck # TypeScript check
 npm run lint      # ESLint

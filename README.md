@@ -2,7 +2,7 @@
   <h1 align="center">@cocaxcode/database-mcp</h1>
   <p align="center">
     <strong>Talk to your databases in natural language.</strong><br/>
-    23 tools &middot; 3 databases &middot; Rollback &middot; Schema auto-discovery &middot; Zero config
+    26 tools &middot; 3 databases &middot; Rollback &middot; Dump/Restore &middot; Schema auto-discovery &middot; Zero config
   </p>
 </p>
 
@@ -11,8 +11,8 @@
   <a href="https://www.npmjs.com/package/@cocaxcode/database-mcp"><img src="https://img.shields.io/npm/dm/@cocaxcode/database-mcp.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tools-23-blueviolet?style=flat-square" alt="23 tools" />
-  <img src="https://img.shields.io/badge/tests-88-brightgreen?style=flat-square" alt="88 tests" />
+  <img src="https://img.shields.io/badge/tools-26-blueviolet?style=flat-square" alt="26 tools" />
+  <img src="https://img.shields.io/badge/tests-98-brightgreen?style=flat-square" alt="98 tests" />
 </p>
 
 <p align="center">
@@ -238,6 +238,8 @@ You don't need to memorize tool names, parameters, or SQL syntax — just tell t
 | *"Show me the execution plan for this query"* | `EXPLAIN ANALYZE` with dialect-specific syntax |
 | *"What did I run today?"* | `history_list` — filtered query history |
 | *"Duplicate the prod connection as staging"* | Creates identical connection with a new name |
+| *"Dump the entire database"* | Asks: structure only or with data? Which tables? Then generates SQL file |
+| *"Restore from the last dump"* | Lists available dumps, asks for confirmation, then restores |
 
 **The AI already knows your schema** through MCP Resources. It reads `db://schema` to discover all tables and `db://tables/{name}/schema` to get columns, foreign keys, and indexes. When you say *"show me all orders with their products"*, it doesn't guess — it reads the FKs and builds the correct JOIN.
 
@@ -360,7 +362,7 @@ Every mutation (INSERT, UPDATE, DELETE) automatically captures a **pre-mutation 
 | `INSERT INTO users ...` | `DELETE FROM users WHERE id = {new_id}` |
 | DDL (CREATE, ALTER, DROP) | Snapshot stored but rollback blocked — DDL changes are logged, not reversible |
 
-Snapshots are stored per-project (max 500, auto-truncated).
+Snapshots are stored per-project (max 1000, configurable).
 
 ### Query History
 
@@ -374,6 +376,41 @@ Every query is logged per-project with timestamp, SQL, connection name, executio
 ```
 
 History is stored in `{project}/.database-mcp/history.json` (max 5000 entries, auto-truncated).
+
+### Database Dump & Restore
+
+Full database backup and restore — structure, data, or both. The tool guides you through the process step by step:
+
+```
+"Dump the database"
+→ "How do you want to export? (1) Structure only  (2) Structure + data"
+→ "Which tables? (1) All tables  (2) Select specific ones"
+→ Generates SQL file in {project}/.database-mcp/dumps/
+```
+
+**Export options:**
+
+| Mode | What it exports |
+|---|---|
+| `schema` | CREATE TABLE, indexes, foreign keys — no data |
+| `full` | CREATE TABLE + INSERT for every row |
+
+You can export all tables or pick specific ones. The generated SQL handles:
+- **DROP TABLE IF EXISTS** before each CREATE (safe re-import)
+- **Foreign key disable/enable** around the dump (avoids FK constraint errors during restore)
+- **Dialect-aware DDL** — SQLite PRAGMA, PostgreSQL SERIAL, MySQL AUTO_INCREMENT
+
+**Restore:**
+
+```
+"Restore from the last dump"
+→ Lists available dump files with size and date
+→ "Are you sure? This will DROP and recreate the affected tables."
+→ You confirm
+→ Executes all statements, reports success/errors
+```
+
+Dump files are stored in `{project}/.database-mcp/dumps/` (auto-gitignored).
 
 ### Export & Import Connections
 
@@ -408,13 +445,14 @@ Passwords are masked by default in exports. Use `include_secrets=true` to includ
 
 ## Tool Reference
 
-23 tools organized in 6 categories:
+26 tools organized in 7 categories:
 
 | Category | Tools | Count |
 |----------|-------|-------|
 | **Connections** | `conn_create` `conn_list` `conn_get` `conn_set` `conn_switch` `conn_rename` `conn_delete` `conn_duplicate` `conn_test` `conn_project_list` `conn_project_clear` `conn_export` `conn_import` | 13 |
 | **Schema** | `search_schema` | 1 |
 | **Queries** | `execute_query` `execute_mutation` `explain_query` | 3 |
+| **Dump** | `db_dump` `db_restore` `db_dump_list` | 3 |
 | **Rollback** | `rollback_list` `rollback_apply` | 2 |
 | **History** | `history_list` `history_clear` | 2 |
 | **Config** | `config_get` `config_set` | 2 |
@@ -439,7 +477,9 @@ All connection data lives in `~/.database-mcp/` (user home directory) as plain J
 
 {your-project}/.database-mcp/            # Per-project (auto-added to .gitignore)
 ├── history.json                          # Query history (5000 max, configurable)
-└── rollbacks.json                        # Pre-mutation snapshots (1000 max, configurable)
+├── rollbacks.json                        # Pre-mutation snapshots (1000 max, configurable)
+└── dumps/                                # Database dumps (SQL files)
+    └── {conn}-{timestamp}-{mode}.sql
 ```
 
 ### Configuration
@@ -493,7 +533,7 @@ Being clear about scope:
 - **No cloud databases with custom auth** — Standard DSN/credentials only. No IAM auth, no SSL client certificates (yet).
 - **No transaction management** — Each mutation is a standalone operation. Rollback is via reverse SQL from snapshots, not SQL `ROLLBACK`.
 - **No GUI / dashboard** — It's a headless MCP server. The AI client (Claude, Cursor, etc.) is the interface.
-- **No data export** — It returns query results to the AI. If you need CSV/Excel export, that's a different tool.
+- **No CSV/Excel export** — `db_dump` exports to SQL files. If you need CSV or Excel format, that's a different tool.
 
 ---
 
@@ -502,7 +542,7 @@ Being clear about scope:
 Built for reliability and testability:
 
 - **Zero runtime dependencies** — only `@modelcontextprotocol/sdk` and `zod`
-- **88 integration tests** with SQLite `:memory:` (no real DB needed in CI)
+- **98 integration tests** with SQLite `:memory:` (no real DB needed in CI)
 - **Factory pattern** — `createServer(storageDir?, projectDir?)` for isolated test instances
 - **Strict TypeScript** — zero `any`, full type coverage
 - **< 60KB** bundled output via tsup
@@ -510,18 +550,19 @@ Built for reliability and testability:
 
 ```
 src/
-├── tools/           # 19 MCP tool handlers (one file per category)
+├── tools/           # 26 MCP tool handlers (one file per category)
 ├── resources/       # MCP Resources (schema auto-discovery)
 ├── services/        # Business logic with DB interaction
 │   ├── connection-manager   # Lazy connect, driver caching
 │   ├── schema-introspector  # Multi-dialect introspection
 │   ├── query-executor       # Read/mutation/explain with safety
 │   ├── rollback-manager     # Snapshot capture + reverse SQL
-│   └── history-logger       # Per-project query log
+│   ├── history-logger       # Per-project query log
+│   └── dump-manager         # Database dump/restore (SQL generation)
 ├── drivers/         # Database adapters (postgres, mysql, sqlite)
 ├── lib/             # Pure logic (types, storage, sanitize)
 ├── utils/           # SQL classifier, parser, formatter
-└── __tests__/       # 10 test suites, 88 tests
+└── __tests__/       # 11 test suites, 98 tests
 ```
 
 ---
@@ -532,7 +573,7 @@ src/
 git clone https://github.com/cocaxcode/database-mcp.git
 cd database-mcp
 npm install
-npm test            # 88 tests across 10 suites
+npm test            # 98 tests across 11 suites
 npm run build       # ESM bundle via tsup
 npm run typecheck   # Strict TypeScript
 ```
