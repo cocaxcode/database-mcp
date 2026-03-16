@@ -1,13 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HistoryEntry } from '../lib/types.js'
-import { checkGitignore } from '../utils/gitignore-checker.js'
+import { ensureGitignore } from '../utils/gitignore-checker.js'
 
 export class HistoryLogger {
   private readonly projectDir: string
   private readonly historyFile: string
-  private gitignoreChecked = false
-  private gitignoreMissing = false
+  private gitignoreEnsured = false
   private maxEntries = 5000
 
   constructor(projectDir: string) {
@@ -21,9 +20,9 @@ export class HistoryLogger {
 
   /**
    * Registra una entrada en el historial.
-   * Retorna true si es la primera escritura y falta .gitignore.
+   * En la primera escritura, anade .database-mcp/ al .gitignore automaticamente.
    */
-  async log(entry: Omit<HistoryEntry, 'id'>): Promise<boolean> {
+  async log(entry: Omit<HistoryEntry, 'id'>): Promise<void> {
     await mkdir(join(this.projectDir, '.database-mcp'), { recursive: true })
 
     const entries = await this.readEntries()
@@ -38,15 +37,11 @@ export class HistoryLogger {
 
     await writeFile(this.historyFile, JSON.stringify(trimmed, null, 2), 'utf-8')
 
-    // Verificar gitignore en la primera escritura
-    if (!this.gitignoreChecked) {
-      this.gitignoreChecked = true
-      const hasGitignore = await checkGitignore(this.projectDir)
-      this.gitignoreMissing = !hasGitignore
-      return this.gitignoreMissing
+    // Auto-add .database-mcp/ al .gitignore en la primera escritura
+    if (!this.gitignoreEnsured) {
+      this.gitignoreEnsured = true
+      await ensureGitignore(this.projectDir)
     }
-
-    return false
   }
 
   /**

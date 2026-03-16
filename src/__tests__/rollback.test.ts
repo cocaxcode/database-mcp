@@ -63,6 +63,65 @@ describe('Rollback tools', () => {
     expect(data2.rowCount).toBe(2)
   })
 
+  it('rollback de INSERT elimina la fila insertada', async () => {
+    // Insertar Charlie
+    const insertResult = await callTool(ctx.client, 'execute_mutation', {
+      sql: "INSERT INTO users (name, email) VALUES ('Charlie', 'charlie@test.com')",
+    })
+
+    // Extraer rollback ID
+    const rollbackLine = insertResult.text.split('\n').find((l: string) => l.includes('Rollback disponible'))
+    const rollbackId = rollbackLine?.split(': ')[1]
+    expect(rollbackId).toBeDefined()
+
+    // Verificar que Charlie existe (3 users)
+    const check1 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
+    const data1 = JSON.parse(check1.text.split('\n\nNota:')[0])
+    expect(data1.rowCount).toBe(3)
+
+    // Aplicar rollback del INSERT
+    const rollback = await callTool(ctx.client, 'rollback_apply', { id: rollbackId!, confirm: true })
+    expect(rollback.text).toContain('Rollback aplicado')
+
+    // Verificar que Charlie fue eliminado (2 users)
+    const check2 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
+    const data2 = JSON.parse(check2.text.split('\n\nNota:')[0])
+    expect(data2.rowCount).toBe(2)
+  })
+
+  it('rollback de DELETE con columnas JSON funciona', async () => {
+    // Crear tabla con columna JSON
+    await callTool(ctx.client, 'execute_mutation', {
+      sql: 'CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, data TEXT)',
+    })
+    await callTool(ctx.client, 'execute_mutation', {
+      sql: `INSERT INTO items (name, data) VALUES ('item1', '{"key":"value","nested":{"a":1}}')`,
+    })
+
+    // Eliminar
+    const deleteResult = await callTool(ctx.client, 'execute_mutation', {
+      sql: "DELETE FROM items WHERE name = 'item1'",
+    })
+
+    const rollbackLine = deleteResult.text.split('\n').find((l: string) => l.includes('Rollback disponible'))
+    const rollbackId = rollbackLine?.split(': ')[1]
+    expect(rollbackId).toBeDefined()
+
+    // Verificar eliminado
+    const check1 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM items' })
+    const data1 = JSON.parse(check1.text.split('\n\nNota:')[0])
+    expect(data1.rowCount).toBe(0)
+
+    // Rollback
+    const rollback = await callTool(ctx.client, 'rollback_apply', { id: rollbackId!, confirm: true })
+    expect(rollback.text).toContain('Rollback aplicado')
+
+    // Verificar restaurado
+    const check2 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM items' })
+    const data2 = JSON.parse(check2.text.split('\n\nNota:')[0])
+    expect(data2.rowCount).toBe(1)
+  })
+
   it('rollback sin confirm muestra preview', async () => {
     await callTool(ctx.client, 'execute_mutation', {
       sql: "DELETE FROM users WHERE name = 'Alice'",

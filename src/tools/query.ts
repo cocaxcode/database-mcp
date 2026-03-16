@@ -33,12 +33,11 @@ export function registerQueryTools(
         const connName = manager.getActiveConnectionName() ?? 'unknown'
         const start = performance.now()
 
-        let gitignoreNote = ''
         try {
           const result = await executeRead(driver, params.sql, params.params, params.limit)
           const executionTimeMs = Math.round(performance.now() - start)
 
-          const shouldWarn = await historyLogger.log({
+          await historyLogger.log({
             sql: params.sql,
             params: params.params,
             type: 'read',
@@ -49,11 +48,7 @@ export function registerQueryTools(
             success: true,
           })
 
-          if (shouldWarn) {
-            gitignoreNote = "\n\nNota: anade '.database-mcp/' a tu .gitignore para no commitear historial y rollbacks."
-          }
-
-          return text(formatQueryResult(result) + gitignoreNote)
+          return text(formatQueryResult(result))
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({
@@ -108,12 +103,20 @@ export function registerQueryTools(
           // Si falla el snapshot, continuar sin rollback
         }
 
-        let gitignoreNote = ''
         try {
           const result = await executeMutation(driver, params.sql, params.params)
           const executionTimeMs = Math.round(performance.now() - start)
 
-          const shouldWarn = await historyLogger.log({
+          // Completar snapshot de INSERT con datos post-insert
+          if (rollbackId && sqlType !== 'ddl') {
+            try {
+              await rollbackMgr.completeInsertSnapshot(rollbackId, driver)
+            } catch {
+              // No bloquear si falla la captura post-insert
+            }
+          }
+
+          await historyLogger.log({
             sql: params.sql,
             params: params.params,
             type: sqlType === 'ddl' ? 'ddl' : 'write',
@@ -124,12 +127,8 @@ export function registerQueryTools(
             success: true,
           })
 
-          if (shouldWarn) {
-            gitignoreNote = "\n\nNota: anade '.database-mcp/' a tu .gitignore para no commitear historial y rollbacks."
-          }
-
           const rollbackMsg = rollbackId ? `\nRollback disponible: ${rollbackId}` : ''
-          return text(formatQueryResult(result) + rollbackMsg + gitignoreNote)
+          return text(formatQueryResult(result) + rollbackMsg)
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({

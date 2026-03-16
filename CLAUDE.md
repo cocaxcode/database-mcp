@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 26 tools, 98 tests.
+MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 26 tools, 101 tests.
 
 ## Stack
 

@@ -44,7 +44,7 @@ export class RollbackManager {
       timestamp,
     }
 
-    // Capturar filas afectadas para UPDATE y DELETE
+    // Capturar filas afectadas para UPDATE y DELETE (pre-mutation state)
     if (parsed?.table && (snap.type === 'update' || snap.type === 'delete')) {
       try {
         const selectSql = parsed.where
@@ -64,6 +64,75 @@ export class RollbackManager {
     await this.truncate()
 
     return id
+  }
+
+  /**
+   * Completa un snapshot de INSERT capturando los datos insertados.
+   * Debe llamarse DESPUES de ejecutar el INSERT para obtener los IDs/datos insertados.
+   */
+  async completeInsertSnapshot(
+    id: string,
+    driver: DatabaseDriver,
+  ): Promise<void> {
+    const snap = await this.get(id)
+    if (!snap || snap.type !== 'insert' || !snap.table) return
+
+    try {
+      const parsed = extractTableAndWhere(snap.sql)
+      if (!parsed?.table) return
+
+      // Estrategia: obtener la ultima fila insertada
+      // Para SQLite: last_insert_rowid()
+      // Para PostgreSQL/MySQL: usar ORDER BY + LIMIT para obtener las filas mas recientes
+      let insertedRows: Record<string, unknown>[] = []
+
+      if (driver.type === 'sqlite') {
+        const lastId = await driver.execute('SELECT last_insert_rowid() as id')
+        const rowId = lastId.rows[0]?.id
+        if (rowId !== undefined) {
+          const result = await driver.execute(`SELECT * FROM "${parsed.table}" WHERE rowid = ${rowId}`)
+          insertedRows = result.rows
+        }
+      } else if (driver.type === 'postgresql') {
+        // Para PG, intentar obtener por ctid (ultima fila)
+        // Alternativa mas segura: buscar el max ID
+        const cols = await driver.execute(
+          `SELECT column_name FROM information_schema.columns WHERE table_name = '${parsed.table}' AND table_schema = 'public' ORDER BY ordinal_position LIMIT 1`,
+        )
+        const firstCol = (cols.rows[0]?.column_name as string) ?? 'id'
+        const result = await driver.execute(
+          `SELECT * FROM "${parsed.table}" ORDER BY "${firstCol}" DESC LIMIT 1`,
+        )
+        insertedRows = result.rows
+      } else if (driver.type === 'mysql') {
+        const lastId = await driver.execute('SELECT LAST_INSERT_ID() as id')
+        const rowId = lastId.rows[0]?.id
+        if (rowId !== undefined && Number(rowId) > 0) {
+          // MySQL LAST_INSERT_ID devuelve 0 si no hay auto-increment
+          const result = await driver.execute(`SELECT * FROM \`${parsed.table}\` WHERE id = ${rowId}`)
+          insertedRows = result.rows
+        }
+        if (!insertedRows.length) {
+          // Fallback: ultima fila
+          const cols = await driver.execute(
+            `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = '${parsed.table}' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION LIMIT 1`,
+          )
+          const firstCol = ((cols.rows[0]?.COLUMN_NAME ?? cols.rows[0]?.column_name) as string) ?? 'id'
+          const result = await driver.execute(
+            `SELECT * FROM \`${parsed.table}\` ORDER BY \`${firstCol}\` DESC LIMIT 1`,
+          )
+          insertedRows = result.rows
+        }
+      }
+
+      if (insertedRows.length > 0) {
+        snap.insertedRows = insertedRows
+        const filePath = join(this.rollbackDir, `${id}.json`)
+        await writeFile(filePath, JSON.stringify(snap, null, 2), 'utf-8')
+      }
+    } catch {
+      // Si falla la captura post-insert, el rollback quedara sin datos
+    }
   }
 
   /**
@@ -126,7 +195,7 @@ export class RollbackManager {
 
     const reverseSql = this.generateReverseSql(snap)
     if (!reverseSql.length) {
-      throw new Error('No se puede generar SQL inverso para este rollback')
+      throw new Error('No se puede generar SQL inverso para este rollback (sin datos suficientes)')
     }
 
     // Ejecutar todas las sentencias inversas
@@ -153,9 +222,14 @@ export class RollbackManager {
 
     switch (snap.type) {
       case 'insert':
-        // INSERT → no tenemos pre-state, pero si tenemos insertedIds podriamos hacer DELETE
-        // Por ahora, retornar vacio si no hay info suficiente
-        return []
+        // INSERT → DELETE las filas insertadas
+        if (!snap.insertedRows?.length) return []
+        return snap.insertedRows.map((row) => {
+          const columns = Object.keys(row)
+          // Usar primera columna como PK (heuristica)
+          const pkCol = columns[0]
+          return `DELETE FROM "${snap.table}" WHERE "${pkCol}" = ${escapeValue(row[pkCol])}`
+        })
 
       case 'delete':
         // DELETE → INSERT las filas capturadas
@@ -213,6 +287,9 @@ function escapeValue(value: unknown): string {
   if (value === null || value === undefined) return 'NULL'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
-  // Escapar comillas simples
+  if (value instanceof Date) return `'${value.toISOString()}'`
+  // Objects and arrays (jsonb, json columns) — serialize as JSON string
+  if (typeof value === 'object') return `'${JSON.stringify(value).replace(/'/g, "''")}'`
+  // Strings — escape single quotes
   return `'${String(value).replace(/'/g, "''")}'`
 }

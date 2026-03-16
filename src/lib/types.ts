@@ -91,6 +91,7 @@ export interface RollbackSnapshot {
   type: 'insert' | 'update' | 'delete' | 'ddl'
   table?: string
   affectedRows?: Record<string, unknown>[]
+  insertedRows?: Record<string, unknown>[]
   insertedIds?: unknown[]
   timestamp: string
 }
