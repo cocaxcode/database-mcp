@@ -17,11 +17,11 @@ export function registerDumpTools(
   // ── db_dump ──
   server.tool(
     'db_dump',
-    'Exporta la base de datos a un archivo SQL. Permite elegir si exportar solo estructura o tambien datos, y si exportar todas las tablas o solo algunas. Si no se pasan opciones, primero muestra las tablas disponibles para que el usuario elija.',
+    'Exporta la base de datos a un archivo SQL. Flujo conversacional: primero pregunta si exportar todas las tablas o personalizar, luego que contenido incluir (estructura, datos o todo).',
     {
-      mode: z.enum(['schema', 'full']).optional().describe('schema = solo estructura (DDL), full = estructura + datos. Si no se pasa, pregunta al usuario.'),
-      tables: z.array(z.string()).optional().describe('Lista de tablas a exportar. Si no se pasa, pregunta al usuario.'),
-      all_tables: z.boolean().optional().describe('true para exportar todas las tablas sin preguntar'),
+      scope: z.enum(['all', 'custom']).optional().describe('all = todas las tablas, custom = elegir tablas. Si no se pasa, pregunta.'),
+      content: z.enum(['schema', 'data', 'full']).optional().describe('schema = solo estructura, data = solo datos, full = todo. Si no se pasa, pregunta.'),
+      tables: z.array(z.string()).optional().describe('Tablas a exportar (solo cuando scope="custom").'),
       schema: z.string().optional().describe('Schema de PostgreSQL (default: public)'),
     },
     async (params) => {
@@ -29,29 +29,18 @@ export function registerDumpTools(
         const driver = await manager.getActiveDriver()
         const connName = manager.getActiveConnectionName() ?? 'unknown'
 
-        // Verificar modo read-write para dumps con datos
-        if (params.mode === 'full') {
-          const activeConnName = await storage.getActiveConnection()
-          if (activeConnName) {
-            const conn = await storage.getConnection(activeConnName)
-            if (conn?.mode === 'read-only') {
-              // read-only puede exportar sin problema, es solo lectura
-            }
-          }
-        }
-
-        // Si no se paso mode, preguntar
-        if (!params.mode) {
+        // Paso 1: Si no se paso scope, preguntar total o personalizada
+        if (!params.scope) {
           return text(
-            'Como quieres exportar la base de datos?\n\n' +
-            '1. **Solo estructura** (CREATE TABLE, indices, foreign keys) → llama db_dump con mode="schema"\n' +
-            '2. **Estructura + datos** (CREATE TABLE + INSERT para cada fila) → llama db_dump con mode="full"\n\n' +
+            'Como quieres exportar?\n\n' +
+            '1. **Todas las tablas** → llama db_dump con scope="all"\n' +
+            '2. **Personalizar tablas** → llama db_dump con scope="custom"\n\n' +
             'Elige una opcion.',
           )
         }
 
-        // Si no se pasaron tablas ni all_tables, listar las disponibles
-        if (!params.tables && !params.all_tables) {
+        // Paso 2: Si scope=custom y no se pasaron tablas, listar disponibles con conteos
+        if (params.scope === 'custom' && !params.tables) {
           const tables = await SchemaIntrospector.getTables(driver, {
             schema: params.schema,
             objectType: 'table',
@@ -62,63 +51,71 @@ export function registerDumpTools(
             return error('No se encontraron tablas en la base de datos')
           }
 
-          // En modo full, mostrar conteo de filas por tabla
-          if (params.mode === 'full') {
-            const counts: { name: string; rows: number }[] = []
-            let totalRows = 0
+          const counts: { name: string; rows: number }[] = []
+          let totalRows = 0
 
-            for (const t of tables) {
-              try {
-                const result = await driver.execute(`SELECT COUNT(*) as cnt FROM "${t.name}"`)
-                const cnt = Number(result.rows[0]?.cnt ?? 0)
-                counts.push({ name: t.name, rows: cnt })
-                totalRows += cnt
-              } catch {
-                counts.push({ name: t.name, rows: -1 })
-              }
+          for (const t of tables) {
+            try {
+              const result = await driver.execute(`SELECT COUNT(*) as cnt FROM "${t.name}"`)
+              const cnt = Number(result.rows[0]?.cnt ?? 0)
+              counts.push({ name: t.name, rows: cnt })
+              totalRows += cnt
+            } catch {
+              counts.push({ name: t.name, rows: -1 })
             }
-
-            const maxNameLen = Math.max(...counts.map((c) => c.name.length))
-            const tableList = counts.map((c) => {
-              const rowsStr = c.rows >= 0 ? `${c.rows.toLocaleString()} filas` : 'error al contar'
-              return `  - ${c.name.padEnd(maxNameLen)}  (${rowsStr})`
-            }).join('\n')
-
-            return text(
-              `Tablas disponibles (${tables.length}, ${totalRows.toLocaleString()} filas en total):\n\n${tableList}\n\n` +
-              'Que quieres exportar?\n\n' +
-              `1. **Todas las tablas** → llama db_dump con mode="full" y all_tables=true\n` +
-              `2. **Solo algunas** → llama db_dump con mode="full" y tables=["tabla1", "tabla2"]\n`,
-            )
           }
 
-          // En modo schema, solo nombres
-          const tableList = tables.map((t) => `  - ${t.name}`).join('\n')
+          const maxNameLen = Math.max(...counts.map((c) => c.name.length))
+          const tableList = counts.map((c) => {
+            const rowsStr = c.rows >= 0 ? `${c.rows.toLocaleString()} filas` : 'error al contar'
+            return `  - ${c.name.padEnd(maxNameLen)}  (${rowsStr})`
+          }).join('\n')
 
           return text(
-            `Tablas disponibles (${tables.length}):\n\n${tableList}\n\n` +
-            'Que quieres exportar?\n\n' +
-            `1. **Todas las tablas** → llama db_dump con mode="${params.mode}" y all_tables=true\n` +
-            `2. **Solo algunas** → llama db_dump con mode="${params.mode}" y tables=["tabla1", "tabla2"]\n`,
+            `Tablas disponibles (${tables.length}, ${totalRows.toLocaleString()} filas en total):\n\n${tableList}\n\n` +
+            'Que tablas quieres exportar?\n\n' +
+            `Llama db_dump con scope="custom" y tables=["tabla1", "tabla2"]`,
+          )
+        }
+
+        // Paso 3: Si no se paso content, preguntar que incluir
+        if (!params.content) {
+          const scopeParam = params.scope === 'all'
+            ? 'scope="all"'
+            : `scope="custom" tables=${JSON.stringify(params.tables)}`
+
+          return text(
+            'Que contenido quieres exportar?\n\n' +
+            `1. **Solo estructura** (CREATE TABLE, indices, FKs) → llama db_dump con ${scopeParam} content="schema"\n` +
+            `2. **Solo datos** (INSERT statements) → llama db_dump con ${scopeParam} content="data"\n` +
+            `3. **Todo** (estructura + datos) → llama db_dump con ${scopeParam} content="full"\n\n` +
+            'Elige una opcion.',
           )
         }
 
         // Ejecutar dump
         const result = await dumpMgr.dump(driver, connName, {
-          includeData: params.mode === 'full',
-          tables: params.all_tables ? undefined : params.tables,
+          includeSchema: params.content === 'schema' || params.content === 'full',
+          includeData: params.content === 'data' || params.content === 'full',
+          tables: params.scope === 'custom' ? params.tables : undefined,
           schema: params.schema,
         })
 
         const sizeKB = (result.sizeBytes / 1024).toFixed(1)
+        const contentLabel = params.content === 'schema'
+          ? 'solo estructura'
+          : params.content === 'data'
+            ? 'solo datos'
+            : 'estructura + datos'
         const lines = [
           'Dump completado:',
           '',
-          `  Archivo:  ${result.filename}`,
-          `  Tablas:   ${result.tables}`,
-          `  Filas:    ${result.totalRows}`,
-          `  Tamano:   ${sizeKB} KB`,
-          `  Ruta:     ${result.filepath}`,
+          `  Archivo:   ${result.filename}`,
+          `  Contenido: ${contentLabel}`,
+          `  Tablas:    ${result.tables}`,
+          `  Filas:     ${result.totalRows}`,
+          `  Tamano:    ${sizeKB} KB`,
+          `  Ruta:      ${result.filepath}`,
           '',
           'Para restaurar en otra base de datos, usa db_restore.',
         ]

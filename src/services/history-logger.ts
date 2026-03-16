@@ -1,12 +1,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HistoryEntry } from '../lib/types.js'
-import { ensureGitignore } from '../utils/gitignore-checker.js'
 
 export class HistoryLogger {
   private readonly projectDir: string
   private readonly historyFile: string
-  private gitignoreEnsured = false
   private maxEntries = 5000
 
   constructor(projectDir: string) {
@@ -36,12 +34,6 @@ export class HistoryLogger {
       : entries
 
     await writeFile(this.historyFile, JSON.stringify(trimmed, null, 2), 'utf-8')
-
-    // Auto-add .database-mcp/ al .gitignore en la primera escritura
-    if (!this.gitignoreEnsured) {
-      this.gitignoreEnsured = true
-      await ensureGitignore(this.projectDir)
-    }
   }
 
   /**

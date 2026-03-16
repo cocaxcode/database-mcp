@@ -5,7 +5,9 @@ import { SchemaIntrospector } from './schema-introspector.js'
 import type { TableInfo, ColumnInfo } from '../lib/types.js'
 
 export interface DumpOptions {
-  /** Solo estructura (DDL) o tambien datos */
+  /** Incluir estructura (CREATE TABLE, indices, FKs) */
+  includeSchema: boolean
+  /** Incluir datos (INSERT statements) */
   includeData: boolean
   /** Todas las tablas o solo las especificadas */
   tables?: string[]
@@ -60,9 +62,11 @@ export class DumpManager {
     parts.push(buildDisableFKs(driver.type))
 
     for (const table of tables) {
-      // CREATE TABLE
-      const ddl = await buildCreateTable(driver, table)
-      parts.push(ddl)
+      // CREATE TABLE (DDL)
+      if (options.includeSchema) {
+        const ddl = await buildCreateTable(driver, table)
+        parts.push(ddl)
+      }
 
       // INSERT statements
       if (options.includeData) {
@@ -80,7 +84,11 @@ export class DumpManager {
     const content = parts.join('\n\n')
 
     // Nombre: {conn}-{timestamp}-{mode}.sql
-    const mode = options.includeData ? 'full' : 'schema'
+    const mode = options.includeSchema && options.includeData
+      ? 'full'
+      : options.includeData
+        ? 'data'
+        : 'schema'
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const safeName = connName.replace(/[^a-zA-Z0-9_-]/g, '_')
     const filename = `${safeName}-${ts}-${mode}.sql`
@@ -151,7 +159,11 @@ export class DumpManager {
 // ── SQL Generation Helpers ──
 
 function buildHeader(dialect: string, connName: string, options: DumpOptions): string {
-  const mode = options.includeData ? 'estructura + datos' : 'solo estructura'
+  const mode = options.includeSchema && options.includeData
+    ? 'estructura + datos'
+    : options.includeData
+      ? 'solo datos'
+      : 'solo estructura'
   const tables = options.tables ? options.tables.join(', ') : 'todas'
   return [
     `-- ============================================`,

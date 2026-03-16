@@ -12,6 +12,7 @@ import { registerHistoryTools } from './tools/history.js'
 import { registerConfigTools } from './tools/config.js'
 import { registerDumpTools } from './tools/dump.js'
 import { registerSchemaResources } from './resources/schema.js'
+import { ensureGitignore } from './utils/gitignore-checker.js'
 
 const VERSION = '0.1.0'
 
@@ -32,6 +33,9 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   const rollbackMgr = new RollbackManager(effectiveProjectDir)
   const historyLogger = new HistoryLogger(effectiveProjectDir)
   const dumpMgr = new DumpManager(effectiveProjectDir)
+
+  // Asegurar que .database-mcp/ esta en .gitignore del proyecto
+  ensureGitignore(effectiveProjectDir).catch(() => {})
 
   // Cargar config y aplicar limites
   const applyConfig = async () => {

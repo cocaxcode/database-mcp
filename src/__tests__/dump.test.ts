@@ -37,15 +37,19 @@ describe('db_dump / db_restore / db_dump_list', () => {
     await ctx.cleanup()
   })
 
-  it('pregunta por modo si no se pasa', async () => {
+  // ── Flujo conversacional ──
+
+  it('paso 1: pregunta scope (total/personalizada) si no se pasa', async () => {
     const res = await callTool(ctx.client, 'db_dump', {})
-    expect(res.text).toContain('Solo estructura')
-    expect(res.text).toContain('Estructura + datos')
+    expect(res.text).toContain('Todas las tablas')
+    expect(res.text).toContain('Personalizar tablas')
+    expect(res.text).toContain('scope="all"')
+    expect(res.text).toContain('scope="custom"')
     expect(res.isError).toBeFalsy()
   })
 
-  it('pregunta por tablas con conteo de filas en modo full', async () => {
-    const res = await callTool(ctx.client, 'db_dump', { mode: 'full' })
+  it('paso 2: lista tablas con conteo si scope=custom sin tables', async () => {
+    const res = await callTool(ctx.client, 'db_dump', { scope: 'custom' })
     expect(res.text).toContain('Tablas disponibles')
     expect(res.text).toContain('users')
     expect(res.text).toContain('posts')
@@ -54,45 +58,74 @@ describe('db_dump / db_restore / db_dump_list', () => {
     expect(res.isError).toBeFalsy()
   })
 
-  it('pregunta por tablas sin conteo en modo schema', async () => {
-    const res = await callTool(ctx.client, 'db_dump', { mode: 'schema' })
-    expect(res.text).toContain('Tablas disponibles')
-    expect(res.text).toContain('users')
-    expect(res.text).not.toContain('filas')
+  it('paso 3: pregunta contenido si scope=all sin content', async () => {
+    const res = await callTool(ctx.client, 'db_dump', { scope: 'all' })
+    expect(res.text).toContain('Solo estructura')
+    expect(res.text).toContain('Solo datos')
+    expect(res.text).toContain('Todo')
+    expect(res.text).toContain('content="schema"')
+    expect(res.text).toContain('content="data"')
+    expect(res.text).toContain('content="full"')
     expect(res.isError).toBeFalsy()
   })
 
-  it('exporta solo estructura', async () => {
+  it('paso 3: pregunta contenido si scope=custom con tables', async () => {
+    const res = await callTool(ctx.client, 'db_dump', { scope: 'custom', tables: ['users'] })
+    expect(res.text).toContain('Solo estructura')
+    expect(res.text).toContain('Solo datos')
+    expect(res.text).toContain('content="schema"')
+    expect(res.isError).toBeFalsy()
+  })
+
+  // ── Ejecucion real ──
+
+  it('exporta solo estructura (all + schema)', async () => {
     const res = await callTool(ctx.client, 'db_dump', {
-      mode: 'schema',
-      all_tables: true,
+      scope: 'all',
+      content: 'schema',
     })
     expect(res.text).toContain('Dump completado')
-    expect(res.text).toContain('Filas:    0')
+    expect(res.text).toContain('solo estructura')
+    expect(res.text).toContain('Filas:     0')
     expect(res.text).toMatch(/Tablas:\s+2/)
     expect(res.isError).toBeFalsy()
   })
 
-  it('exporta estructura + datos', async () => {
+  it('exporta solo datos (all + data)', async () => {
     const res = await callTool(ctx.client, 'db_dump', {
-      mode: 'full',
-      all_tables: true,
+      scope: 'all',
+      content: 'data',
     })
     expect(res.text).toContain('Dump completado')
-    expect(res.text).toContain('Filas:    3')
+    expect(res.text).toContain('solo datos')
+    expect(res.text).toContain('Filas:     3')
     expect(res.isError).toBeFalsy()
   })
 
-  it('exporta tablas especificas', async () => {
+  it('exporta todo (all + full)', async () => {
     const res = await callTool(ctx.client, 'db_dump', {
-      mode: 'full',
+      scope: 'all',
+      content: 'full',
+    })
+    expect(res.text).toContain('Dump completado')
+    expect(res.text).toContain('estructura + datos')
+    expect(res.text).toContain('Filas:     3')
+    expect(res.isError).toBeFalsy()
+  })
+
+  it('exporta tablas especificas con datos', async () => {
+    const res = await callTool(ctx.client, 'db_dump', {
+      scope: 'custom',
+      content: 'full',
       tables: ['users'],
     })
     expect(res.text).toContain('Dump completado')
     expect(res.text).toMatch(/Tablas:\s+1/)
-    expect(res.text).toContain('Filas:    2')
+    expect(res.text).toContain('Filas:     2')
     expect(res.isError).toBeFalsy()
   })
+
+  // ── Dump list ──
 
   it('lista dumps disponibles', async () => {
     const res = await callTool(ctx.client, 'db_dump_list', {})
@@ -101,8 +134,9 @@ describe('db_dump / db_restore / db_dump_list', () => {
     expect(res.isError).toBeFalsy()
   })
 
+  // ── Restore ──
+
   it('restore pide confirmacion', async () => {
-    // Primero obtener el nombre del dump
     const listRes = await callTool(ctx.client, 'db_dump_list', {})
     const dumps = JSON.parse(listRes.text)
     const filename = dumps[0].filename
@@ -114,7 +148,6 @@ describe('db_dump / db_restore / db_dump_list', () => {
   })
 
   it('restore ejecuta con confirmacion', async () => {
-    // Obtener el dump full mas reciente
     const listRes = await callTool(ctx.client, 'db_dump_list', {})
     const dumps = JSON.parse(listRes.text)
     const fullDump = dumps.find((d: { filename: string }) => d.filename.includes('full'))
@@ -138,7 +171,6 @@ describe('db_dump / db_restore / db_dump_list', () => {
   })
 
   it('db_dump_list sin dumps devuelve mensaje vacio', async () => {
-    // Crear un cliente nuevo sin dumps
     const ctx2 = await createTestClient()
     const res = await callTool(ctx2.client, 'db_dump_list', {})
     expect(res.text).toContain('No hay dumps disponibles')
