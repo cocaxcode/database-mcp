@@ -2,7 +2,7 @@
   <h1 align="center">@cocaxcode/database-mcp</h1>
   <p align="center">
     <strong>Talk to your databases in natural language.</strong><br/>
-    19 tools &middot; 3 databases &middot; Rollback &middot; Schema auto-discovery &middot; Zero config
+    21 tools &middot; 3 databases &middot; Rollback &middot; Schema auto-discovery &middot; Zero config
   </p>
 </p>
 
@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/@cocaxcode/database-mcp"><img src="https://img.shields.io/npm/dm/@cocaxcode/database-mcp.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tools-19-blueviolet?style=flat-square" alt="19 tools" />
+  <img src="https://img.shields.io/badge/tools-19-blueviolet?style=flat-square" alt="21 tools" />
   <img src="https://img.shields.io/badge/tests-88-brightgreen?style=flat-square" alt="88 tests" />
 </p>
 
@@ -389,7 +389,7 @@ History is stored in `{project}/.database-mcp/history.json` (max 5000 entries, a
 
 ## Tool Reference
 
-19 tools organized in 5 categories:
+21 tools organized in 6 categories:
 
 | Category | Tools | Count |
 |----------|-------|-------|
@@ -398,6 +398,7 @@ History is stored in `{project}/.database-mcp/history.json` (max 5000 entries, a
 | **Queries** | `execute_query` `execute_mutation` `explain_query` | 3 |
 | **Rollback** | `rollback_list` `rollback_apply` | 2 |
 | **History** | `history_list` `history_clear` | 2 |
+| **Config** | `config_get` `config_set` | 2 |
 
 Plus 2 MCP Resources: `db://schema` and `db://tables/{tableName}/schema`.
 
@@ -422,15 +423,25 @@ All connection data lives in `~/.database-mcp/` (user home directory) as plain J
 └── rollbacks.json                        # Pre-mutation snapshots (1000 max, configurable)
 ```
 
-### Environment variables
+### Configuration
+
+Limits are configurable from the conversation — no need to edit config files:
+
+```
+"Show me the current config"
+"Set max rollbacks to 2000"
+"Set max history to 10000"
+```
+
+Settings are saved permanently in `~/.database-mcp/config.json`.
+
+You can also override via environment variables (takes priority over saved config):
 
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_MCP_DIR` | Global storage directory | `~/.database-mcp/` |
 | `DATABASE_MCP_MAX_ROLLBACKS` | Max rollback snapshots per project | `1000` |
 | `DATABASE_MCP_MAX_HISTORY` | Max history entries per project | `5000` |
-
-Configure them in your MCP client:
 
 ```json
 {
@@ -446,6 +457,8 @@ Configure them in your MCP client:
   }
 }
 ```
+
+Priority: **env var > saved config > default**.
 
 > **Warning:** If you override `DATABASE_MCP_DIR` to a path inside a git repository, add `.database-mcp/` to your `.gitignore` to avoid accidentally pushing credentials to your remote.
 

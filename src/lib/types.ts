@@ -95,6 +95,18 @@ export interface RollbackSnapshot {
   timestamp: string
 }
 
+// ── Config ──
+
+export interface ServerConfig {
+  maxRollbacks: number
+  maxHistory: number
+}
+
+export const DEFAULT_CONFIG: ServerConfig = {
+  maxRollbacks: 1000,
+  maxHistory: 5000,
+}
+
 // ── History ──
 
 export interface HistoryEntry {

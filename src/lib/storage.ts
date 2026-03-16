@@ -2,19 +2,22 @@ import { mkdir, readFile, writeFile, readdir, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { sanitizeName } from './sanitize.js'
-import type { Connection, ConnectionListItem } from './types.js'
+import type { Connection, ConnectionListItem, ServerConfig } from './types.js'
+import { DEFAULT_CONFIG } from './types.js'
 
 export class Storage {
   private readonly baseDir: string
   private readonly connectionsDir: string
   private readonly activeConnFile: string
   private readonly projectConnsFile: string
+  private readonly configFile: string
 
   constructor(baseDir?: string) {
     this.baseDir = baseDir ?? process.env.DATABASE_MCP_DIR ?? join(homedir(), '.database-mcp')
     this.connectionsDir = join(this.baseDir, 'connections')
     this.activeConnFile = join(this.baseDir, 'active-conn')
     this.projectConnsFile = join(this.baseDir, 'project-conns.json')
+    this.configFile = join(this.baseDir, 'config.json')
   }
 
   // ── Connections ──
@@ -219,6 +222,28 @@ export class Storage {
 
   private async getProjectConns(): Promise<Record<string, string>> {
     return (await this.readJson<Record<string, string>>(this.projectConnsFile)) ?? {}
+  }
+
+  // ── Config ──
+
+  /**
+   * Obtiene la config resuelta: env var > config guardada > default.
+   */
+  async getConfig(): Promise<ServerConfig> {
+    const saved = (await this.readJson<Partial<ServerConfig>>(this.configFile)) ?? {}
+
+    return {
+      maxRollbacks: Number(process.env.DATABASE_MCP_MAX_ROLLBACKS) || saved.maxRollbacks || DEFAULT_CONFIG.maxRollbacks,
+      maxHistory: Number(process.env.DATABASE_MCP_MAX_HISTORY) || saved.maxHistory || DEFAULT_CONFIG.maxHistory,
+    }
+  }
+
+  async setConfig(updates: Partial<ServerConfig>): Promise<ServerConfig> {
+    await this.ensureDir('')
+    const current = (await this.readJson<Partial<ServerConfig>>(this.configFile)) ?? {}
+    const merged = { ...current, ...updates }
+    await this.writeJson(this.configFile, merged)
+    return this.getConfig()
   }
 
   // ── Internal ──

@@ -3,17 +3,20 @@ import { join } from 'node:path'
 import type { HistoryEntry } from '../lib/types.js'
 import { checkGitignore } from '../utils/gitignore-checker.js'
 
-const MAX_ENTRIES = Number(process.env.DATABASE_MCP_MAX_HISTORY) || 5000
-
 export class HistoryLogger {
   private readonly projectDir: string
   private readonly historyFile: string
   private gitignoreChecked = false
   private gitignoreMissing = false
+  private maxEntries = 5000
 
   constructor(projectDir: string) {
     this.projectDir = projectDir
     this.historyFile = join(projectDir, '.database-mcp', 'history.json')
+  }
+
+  setMaxEntries(max: number): void {
+    this.maxEntries = max
   }
 
   /**
@@ -29,8 +32,8 @@ export class HistoryLogger {
     entries.push({ ...entry, id: newId })
 
     // Truncar si excede maximo
-    const trimmed = entries.length > MAX_ENTRIES
-      ? entries.slice(entries.length - MAX_ENTRIES)
+    const trimmed = entries.length > this.maxEntries
+      ? entries.slice(entries.length - this.maxEntries)
       : entries
 
     await writeFile(this.historyFile, JSON.stringify(trimmed, null, 2), 'utf-8')

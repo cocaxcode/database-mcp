@@ -5,13 +5,16 @@ import type { RollbackSnapshot, QueryResult } from '../lib/types.js'
 import { extractTableAndWhere } from '../utils/sql-parser-light.js'
 import { classifySql } from '../utils/sql-classifier.js'
 
-const MAX_SNAPSHOTS = Number(process.env.DATABASE_MCP_MAX_ROLLBACKS) || 1000
-
 export class RollbackManager {
   private readonly rollbackDir: string
+  private maxSnapshots = 1000
 
   constructor(projectDir: string) {
     this.rollbackDir = join(projectDir, '.database-mcp', 'rollbacks')
+  }
+
+  setMaxSnapshots(max: number): void {
+    this.maxSnapshots = max
   }
 
   /**
@@ -194,8 +197,8 @@ export class RollbackManager {
       const files = await readdir(this.rollbackDir)
       const jsonFiles = files.filter((f) => f.endsWith('.json')).sort()
 
-      if (jsonFiles.length > MAX_SNAPSHOTS) {
-        const toDelete = jsonFiles.slice(0, jsonFiles.length - MAX_SNAPSHOTS)
+      if (jsonFiles.length > this.maxSnapshots) {
+        const toDelete = jsonFiles.slice(0, jsonFiles.length - this.maxSnapshots)
         for (const file of toDelete) {
           await unlink(join(this.rollbackDir, file))
         }

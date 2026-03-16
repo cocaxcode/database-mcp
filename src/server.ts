@@ -8,6 +8,7 @@ import { registerSchemaTools } from './tools/schema.js'
 import { registerQueryTools } from './tools/query.js'
 import { registerRollbackTools } from './tools/rollback.js'
 import { registerHistoryTools } from './tools/history.js'
+import { registerConfigTools } from './tools/config.js'
 import { registerSchemaResources } from './resources/schema.js'
 
 const VERSION = '0.1.0'
@@ -29,12 +30,21 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   const rollbackMgr = new RollbackManager(effectiveProjectDir)
   const historyLogger = new HistoryLogger(effectiveProjectDir)
 
+  // Cargar config y aplicar limites
+  const applyConfig = async () => {
+    const config = await storage.getConfig()
+    rollbackMgr.setMaxSnapshots(config.maxRollbacks)
+    historyLogger.setMaxEntries(config.maxHistory)
+  }
+  applyConfig().catch(() => {})
+
   // Registrar tools
   registerConnectionTools(server, storage, manager)
   registerSchemaTools(server, manager)
   registerQueryTools(server, storage, manager, rollbackMgr, historyLogger)
   registerRollbackTools(server, rollbackMgr, manager)
   registerHistoryTools(server, historyLogger)
+  registerConfigTools(server, storage, rollbackMgr, historyLogger)
 
   // Registrar resources
   registerSchemaResources(server, manager)

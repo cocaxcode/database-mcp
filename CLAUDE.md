@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history. 19 tools, 88 tests.
+MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history. 21 tools, 88 tests.
 
 ## Stack
 
@@ -24,7 +24,8 @@ src/
 │   ├── schema.ts         # search_schema (1)
 │   ├── query.ts          # execute_query/execute_mutation/explain_query (3)
 │   ├── rollback.ts       # rollback_list/rollback_apply (2)
-│   └── history.ts        # history_list/history_clear (2)
+│   ├── history.ts        # history_list/history_clear (2)
+│   └── config.ts         # config_get/config_set (2)
 ├── resources/
 │   └── schema.ts         # MCP Resources: db://schema, db://tables/{tableName}/schema
 ├── services/             # Business logic with DB interaction
