@@ -78,7 +78,7 @@ Most database MCPs either (a) only support one database type with a hardcoded co
 ### Claude Code
 
 ```bash
-claude mcp add database -- npx -y @cocaxcode/database-mcp@latest
+claude mcp add --scope user database -- npx -y @cocaxcode/database-mcp@latest
 ```
 
 ### Claude Desktop
