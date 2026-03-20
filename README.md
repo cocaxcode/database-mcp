@@ -28,9 +28,11 @@
 
 ## Quick Overview
 
-An [MCP server](https://modelcontextprotocol.io) that lets your AI assistant **connect, query, explore, modify, and rollback** any PostgreSQL, MySQL, or SQLite database — all from natural language.
+The most complete MCP server for databases. 26 tools across 3 engines (PostgreSQL, MySQL, SQLite), with named connection management, automatic rollback, dump/restore, schema auto-discovery via MCP Resources, and full query history — all from natural language.
 
-You describe what you need. The AI reads your schema, writes the SQL, and executes it safely — with automatic LIMIT injection, pre-mutation snapshots, and confirmation before destructive operations. No cloud accounts, no ORMs, no config files. Everything runs locally.
+This is not just a query runner. It is a full database workbench: create and switch named connections like git branches, introspect schemas at three levels of detail, get pre-mutation snapshots on every write, undo mistakes with reverse SQL, dump and restore entire databases, and track every query you run — per project, per connection.
+
+You describe what you need. The AI reads your schema, writes the SQL, and executes it safely — with automatic LIMIT injection, pre-mutation snapshots, and confirmation before destructive operations. No cloud accounts, no ORMs, no config files. Credentials never leave your machine. Everything runs locally.
 
 Works with **Claude Code**, **Claude Desktop**, **Cursor**, **Windsurf**, **VS Code**, **Codex CLI**, **Gemini CLI**, and any MCP-compatible client.
 
@@ -199,22 +201,29 @@ npm install -g sql.js         # SQLite (runs in-process, no native bindings)
 
 ### Multi-database, one interface
 
-Manage PostgreSQL, MySQL, and SQLite through named connections. Switch between them like git branches.
+Most database MCP servers make you reconfigure credentials every session. This one does not. Named connections persist globally — create them once, use them forever.
+
+**Named connections work like git branches.** You create `dev`, `staging`, `prod` once and they are always there. Switching is instant — one command, zero reconfiguration:
 
 ```
 "Create a connection called prod with DSN postgresql://admin:pass@db.example.com:5432/api"
 "Create a read-only connection called analytics pointing to ./data/metrics.db"
 "Switch to prod"           → queries go to PostgreSQL
 "Switch to analytics"      → queries go to SQLite
+"Duplicate prod as prod-readonly with read-only mode"
 ```
 
-**Project-scoped connections** let different projects use different active databases without interfering:
+**Project-scoped connections** let different projects use different active databases without interfering. Working on project A with `dev`? Switch to project B and it remembers you were using `prod` there. Each project tracks its own active connection independently:
 
 ```
 "Switch to staging for this project"
 "Show which projects have connections"
 "Clear the project connection"           → falls back to global active
 ```
+
+**100% local credentials.** Every connection is stored as a JSON file in `~/.database-mcp/connections/`. Passwords never leave your machine. Nothing is sent to the cloud. Nothing is committed to git. Your credentials are yours.
+
+**Live management.** Create, duplicate, rename, test, export, and switch connections mid-conversation. No restart needed, no config file editing, no context loss.
 
 ### Safety built in
 
@@ -326,12 +335,16 @@ Every query logged per-project with timestamp, connection, execution time, and r
 
 ## Storage
 
-Connections live globally. History, rollbacks, and dumps live per-project.
+Storage is split into two locations by design. This separation is intentional and solves a real problem: your credentials belong to you, your project history belongs to the project.
+
+**Global: `~/.database-mcp/`** — connections, credentials, and settings. Lives in your home directory. Never inside a project. Never in git. Never shared with anyone unless you explicitly export them.
+
+**Per-project: `{project}/.database-mcp/`** — query history, rollback snapshots, and database dumps. Lives inside the project directory and is automatically added to `.gitignore` on first write.
 
 ```
 ~/.database-mcp/                          # Global (configurable via DATABASE_MCP_DIR)
 ├── connections/
-│   └── {name}.json                       # Connection configs
+│   └── {name}.json                       # Connection configs (passwords stored locally)
 ├── active-conn                           # Global active connection name
 ├── config.json                           # Saved settings
 └── project-conn/
@@ -343,6 +356,8 @@ Connections live globally. History, rollbacks, and dumps live per-project.
 └── dumps/
     └── {conn}-{timestamp}-{mode}.sql     # Database dumps
 ```
+
+The result: you can share a project repo freely — collaborators get the history and rollback structure, but zero credentials. They create their own connections locally.
 
 ### Configuration
 
@@ -361,7 +376,7 @@ Configurable from the conversation or via environment variables:
 
 Priority: **env var > saved config > default**.
 
-> **Warning:** If you set `DATABASE_MCP_DIR` to a path inside a git repository, add `.database-mcp/` to your `.gitignore` to avoid pushing credentials.
+> **Warning:** If you override `DATABASE_MCP_DIR` to a path inside a git repository, add `.database-mcp/` to your `.gitignore` to avoid pushing credentials.
 
 ---
 
