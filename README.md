@@ -191,8 +191,7 @@ npm install -g mysql2         # MySQL
 npm install -g sql.js         # SQLite (runs in-process, no native bindings)
 ```
 
-> [!NOTE]
-> When using `npx`, drivers must be installed globally. If you install the server globally (`npm install -g @cocaxcode/database-mcp`), drivers can be local or global.
+> **Note:** When using `npx`, drivers must be installed globally. If you install the server globally (`npm install -g @cocaxcode/database-mcp`), drivers can be local or global.
 
 ---
 
@@ -321,8 +320,7 @@ Every query logged per-project with timestamp, connection, execution time, and r
 
 **Resources:** `db://schema` &middot; `db://tables/{tableName}/schema`
 
-> [!TIP]
-> You never need to call these tools directly. Just describe what you want and the AI picks the right one.
+> **Tip:** You never need to call these tools directly. Just describe what you want and the AI picks the right one.
 
 ---
 
@@ -363,8 +361,7 @@ Configurable from the conversation or via environment variables:
 
 Priority: **env var > saved config > default**.
 
-> [!WARNING]
-> If you set `DATABASE_MCP_DIR` to a path inside a git repository, add `.database-mcp/` to your `.gitignore` to avoid pushing credentials.
+> **Warning:** If you set `DATABASE_MCP_DIR` to a path inside a git repository, add `.database-mcp/` to your `.gitignore` to avoid pushing credentials.
 
 ---
 
