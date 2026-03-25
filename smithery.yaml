@@ -1,0 +1,13 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      databaseMcpDir:
+        type: string
+        description: Directory for storing connection configs.
+  commandFunction:
+    |-
+      (config) => ({ command: 'npx', args: ['-y', '@cocaxcode/database-mcp'], env: config.databaseMcpDir ? { DATABASE_MCP_DIR: config.databaseMcpDir } : {} })
