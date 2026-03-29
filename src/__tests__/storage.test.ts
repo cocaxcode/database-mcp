@@ -18,6 +18,7 @@ describe('Storage', () => {
     name,
     type: 'sqlite',
     mode: 'read-write',
+    group: 'test',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
@@ -127,21 +128,28 @@ describe('Storage', () => {
 
   describe('project scoping', () => {
     it('devuelve conexion de proyecto si existe', async () => {
-      await storage.createConnection(makeConn('global'))
       await storage.createConnection(makeConn('local'))
-      await storage.setActiveConnection('global')
       await storage.setActiveConnection('local', '/project/a')
 
       const active = await storage.getActiveConnection('/project/a')
       expect(active).toBe('local')
     })
 
-    it('fallback a global si no hay project-specific', async () => {
-      await storage.createConnection(makeConn('global'))
-      await storage.setActiveConnection('global')
+    it('devuelve null si no hay project-specific ni grupo', async () => {
+      await storage.createConnection(makeConn('some'))
 
       const active = await storage.getActiveConnection('/project/b')
-      expect(active).toBe('global')
+      expect(active).toBeNull()
+    })
+
+    it('devuelve default del grupo si CWD esta en scope', async () => {
+      await storage.createGroup('grp')
+      await storage.addScopeToGroup('grp', '/project/c')
+      await storage.createConnection(makeConn('db1', { group: 'grp' }))
+      await storage.setGroupDefault('grp', 'db1')
+
+      const active = await storage.getActiveConnection('/project/c')
+      expect(active).toBe('db1')
     })
 
     it('clearProjectConnection elimina asociacion', async () => {

@@ -6,7 +6,7 @@ describe('History tools', () => {
 
   beforeEach(async () => {
     ctx = await createTestClient()
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', mode: 'read-write' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', mode: 'read-write', group: 'test' })
     await callTool(ctx.client, 'conn_switch', { name: 'test' })
 
     await callTool(ctx.client, 'execute_mutation', {

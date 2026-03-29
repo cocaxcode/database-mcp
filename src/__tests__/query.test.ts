@@ -7,7 +7,7 @@ describe('Query tools', () => {
   beforeEach(async () => {
     ctx = await createTestClient()
     // Crear y activar conexion SQLite :memory:
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', mode: 'read-write' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', mode: 'read-write', group: 'test' })
     await callTool(ctx.client, 'conn_switch', { name: 'test' })
 
     // Crear tabla de prueba

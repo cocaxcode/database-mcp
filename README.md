@@ -2,7 +2,7 @@
   <h1 align="center">@cocaxcode/database-mcp</h1>
   <p align="center">
     <strong>Your databases, one conversation away.</strong><br/>
-    26 tools &middot; PostgreSQL &middot; MySQL &middot; SQLite &middot; Rollback &middot; Dump/Restore &middot; Schema auto-discovery
+    33 tools &middot; PostgreSQL &middot; MySQL &middot; SQLite &middot; Connection Groups &middot; Rollback &middot; Dump/Restore &middot; Schema auto-discovery
   </p>
 </p>
 
@@ -11,12 +11,13 @@
   <a href="https://www.npmjs.com/package/@cocaxcode/database-mcp"><img src="https://img.shields.io/npm/dm/@cocaxcode/database-mcp.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tools-26-blueviolet?style=flat-square" alt="26 tools" />
+  <img src="https://img.shields.io/badge/tools-33-blueviolet?style=flat-square" alt="33 tools" />
 </p>
 
 <p align="center">
   <a href="#quick-overview">Overview</a> &middot;
   <a href="#just-talk-to-it">Just Talk to It</a> &middot;
+  <a href="#connection-groups">Connection Groups</a> &middot;
   <a href="#installation">Installation</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#tool-reference">Tool Reference</a> &middot;
@@ -28,9 +29,11 @@
 
 ## Quick Overview
 
-The most complete MCP server for databases. 26 tools across 3 engines (PostgreSQL, MySQL, SQLite), with named connection management, automatic rollback, dump/restore, schema auto-discovery via MCP Resources, and full query history — all from natural language.
+The most complete MCP server for databases. 33 tools across 3 engines (PostgreSQL, MySQL, SQLite), with connection groups, named connection management, automatic rollback, dump/restore, schema auto-discovery via MCP Resources, and full query history — all from natural language.
 
-This is not just a query runner. It is a full database workbench: create and switch named connections like git branches, introspect schemas at three levels of detail, get pre-mutation snapshots on every write, undo mistakes with reverse SQL, dump and restore entire databases, and track every query you run — per project, per connection.
+This is not just a query runner. It is a full database workbench: organize connections into groups scoped to your project directories, set defaults that persist between sessions, introspect schemas at three levels of detail, get pre-mutation snapshots on every write, undo mistakes with reverse SQL, dump and restore entire databases, and track every query you run — per project, per connection.
+
+Every connection belongs to a group. Groups have scopes (directories), a default connection, and an active connection. When you work inside a scoped directory, you only see that group's connections — no clutter, no confusion.
 
 You describe what you need. The AI reads your schema, writes the SQL, and executes it safely — with automatic LIMIT injection, pre-mutation snapshots, and confirmation before destructive operations. No cloud accounts, no ORMs, no config files. Credentials never leave your machine. Everything runs locally.
 
@@ -45,33 +48,67 @@ You don't need to memorize tool names or SQL syntax. Just say what you want.
 ```
 > "Connect to my local PostgreSQL on port 5432, database myapp, user admin"
 
+> "Create a group called backend and add this directory"
+
+> "Connect to my PostgreSQL on localhost, put it in the backend group"
+
+> "Set local-pg as the default connection"
+
 > "Show me all tables"
 
 > "What columns does the users table have?"
 
 > "Show me the last 10 orders with the customer name"
-  → AI reads FKs from schema, builds the JOIN, applies LIMIT 10
+  -> AI reads FKs from schema, builds the JOIN, applies LIMIT 10
 
 > "Insert a test user called Alice"
-  → Snapshot captured for rollback
+  -> Snapshot captured for rollback
 
 > "Oops, undo that"
-  → Rows restored via reverse SQL
+  -> Rows restored via reverse SQL
 
-> "Switch to production"
-  → Instant context change, all queries now go to prod
+> "Switch to the production database for this session"
+  -> Instant context change, all queries now go to prod
 
 > "Delete all inactive users"
-  → "This will affect N rows. Call again with confirm=true to proceed."
+  -> "This will affect N rows. Call again with confirm=true to proceed."
 
 > "What did I run today?"
-  → Full query history with timestamps and execution times
+  -> Full query history with timestamps and execution times
 
 > "Dump the database — structure and data"
-  → SQL file generated, ready for restore
+  -> SQL file generated, ready for restore
 ```
 
 The AI already knows your schema through **MCP Resources**. It reads `db://schema` to discover tables and `db://tables/{name}/schema` for columns, foreign keys, and indexes. When you ask for data across tables, it builds correct JOINs automatically.
+
+---
+
+## Connection Groups
+
+Every connection belongs to a group. Groups are the organizing unit for your database connections — they keep things scoped, clean, and automatic.
+
+A group has three key concepts:
+
+- **Scopes**: directories that share the group's connections. When you work inside a scoped directory, you only see that group's connections. No global clutter.
+- **Default**: the connection that activates automatically when you enter a scoped directory. Persists between sessions.
+- **Active**: the connection being used right now. Session only — resets to the default on restart.
+
+Here is a practical workflow:
+
+```
+"Create a group called backend"
+"Add this directory as scope"
+"Create a PostgreSQL connection called local-dev in the backend group"   <- auto-default (first connection)
+"Create another called production in backend"
+"List connections"                                                       <- shows local-dev (active, default)
+"Switch to production"                                                   <- session only
+"Set production as default"                                              <- persists between sessions
+```
+
+The first connection added to a group becomes the default automatically. Switching connections only changes the active for the current session — restart and you are back to the default. If you want the change to stick, set a new default explicitly.
+
+This means you can safely switch to production for a quick query and know that next time you open the project, you will be back on your development database.
 
 ---
 
@@ -166,23 +203,6 @@ Add to `~/.gemini/settings.json`:
 ```
 </details>
 
-### Connect on startup with `--dsn`
-
-Pass a DSN to auto-create a connection on startup:
-
-```json
-{
-  "mcpServers": {
-    "database": {
-      "command": "npx",
-      "args": ["-y", "@cocaxcode/database-mcp@latest", "--dsn", "postgresql://user:pass@localhost:5432/mydb"]
-    }
-  }
-}
-```
-
-Supported formats: `postgresql://`, `mysql://`, `sqlite:///path/to/file.db`, `sqlite://:memory:`
-
 ### Driver installation
 
 Install only the driver(s) you need — they load dynamically at runtime:
@@ -201,25 +221,27 @@ npm install -g sql.js         # SQLite (runs in-process, no native bindings)
 
 ### Multi-database, one interface
 
-Most database MCP servers make you reconfigure credentials every session. This one does not. Named connections persist globally — create them once, use them forever.
+Most database MCP servers make you reconfigure credentials every session. This one does not. Named connections persist inside groups — create them once, use them forever.
 
-**Named connections work like git branches.** You create `dev`, `staging`, `prod` once and they are always there. Switching is instant — one command, zero reconfiguration:
-
-```
-"Create a connection called prod with DSN postgresql://admin:pass@db.example.com:5432/api"
-"Create a read-only connection called analytics pointing to ./data/metrics.db"
-"Switch to prod"           → queries go to PostgreSQL
-"Switch to analytics"      → queries go to SQLite
-"Duplicate prod as prod-readonly with read-only mode"
-```
-
-**Project-scoped connections** let different projects use different active databases without interfering. Working on project A with `dev`? Switch to project B and it remembers you were using `prod` there. Each project tracks its own active connection independently:
+**Named connections work like git branches.** You create `dev`, `staging`, `prod` once inside a group and they are always there. Switching is instant — one command, zero reconfiguration:
 
 ```
-"Switch to staging for this project"
-"Show which projects have connections"
-"Clear the project connection"           → falls back to global active
+"Create a group called my-project and add this directory as scope"
+"Create a connection called dev with host localhost, database myapp, user admin in my-project"
+"Create a read-only connection called analytics pointing to ./data/metrics.db in my-project"
+"Switch to dev"               -> queries go to PostgreSQL
+"Switch to analytics"         -> queries go to SQLite
+"Duplicate dev as dev-readonly with read-only mode"
 ```
+
+**Group-scoped connections** mean different projects see different databases automatically. Working on project A? You see project A's group and connections. Switch to project B's directory and it picks up project B's group with its own default. No manual switching, no interference between projects:
+
+```
+"Create a group called frontend with scope /home/user/frontend"
+"Create a group called backend with scope /home/user/backend"
+```
+
+Now each directory has its own isolated set of connections.
 
 **100% local credentials.** Every connection is stored as a JSON file in `~/.database-mcp/connections/`. Passwords never leave your machine. Nothing is sent to the cloud. Nothing is committed to git. Your credentials are yours.
 
@@ -243,8 +265,8 @@ Every mutation captures a pre-state snapshot. Undo anything.
 ```
 "Show me available rollbacks"
 "Rollback the last delete"
-  → "This will INSERT 47 rows back into orders. Confirm?"
-  → Rows restored via reverse SQL
+  -> "This will INSERT 47 rows back into orders. Confirm?"
+  -> Rows restored via reverse SQL
 ```
 
 | Original operation | Rollback generates |
@@ -259,10 +281,10 @@ Every mutation captures a pre-state snapshot. Undo anything.
 Three levels of detail, with pattern filtering:
 
 ```
-"List all tables"                         → names only (fast)
-"Show me the users table with columns"    → columns + types + nullable
-"Full schema for orders including FKs"    → columns + foreign keys + indexes
-"Tables starting with user"              → pattern: 'user%'
+"List all tables"                         -> names only (fast)
+"Show me the users table with columns"    -> columns + types + nullable
+"Full schema for orders including FKs"    -> columns + foreign keys + indexes
+"Tables starting with user"              -> pattern: 'user%'
 ```
 
 MCP Resources (`db://schema` and `db://tables/{name}/schema`) give AI agents automatic access to your schema — no manual SQL needed for multi-table queries.
@@ -271,10 +293,10 @@ MCP Resources (`db://schema` and `db://tables/{name}/schema`) give AI agents aut
 
 ```
 "Show me all users"
-  → SELECT * FROM users LIMIT 100         ← auto LIMIT
+  -> SELECT * FROM users LIMIT 100         <- auto LIMIT
 
 "Show the execution plan for this query"
-  → EXPLAIN ANALYZE with dialect-specific syntax (PostgreSQL/MySQL/SQLite)
+  -> EXPLAIN ANALYZE with dialect-specific syntax (PostgreSQL/MySQL/SQLite)
 ```
 
 ### Dump and restore
@@ -283,12 +305,12 @@ Full database backup in SQL format — structure only or structure + data.
 
 ```
 "Dump the database"
-  → Choose: structure only or full
-  → Choose: all tables or specific ones
-  → SQL file saved to .database-mcp/dumps/
+  -> Choose: structure only or full
+  -> Choose: all tables or specific ones
+  -> SQL file saved to .database-mcp/dumps/
 
 "Restore from the last dump"
-  → Lists available dumps, asks for confirmation, executes
+  -> Lists available dumps, asks for confirmation, executes
 ```
 
 Generated SQL handles `DROP TABLE IF EXISTS`, FK disable/enable, and dialect-aware DDL.
@@ -306,20 +328,21 @@ Every query logged per-project with timestamp, connection, execution time, and r
 ### Export and import connections
 
 ```
-"Export all connections"                    → JSON with masked passwords
-"Export with secrets included"             → JSON with real credentials
-"Import these connections: { ... }"        → creates missing connections
+"Export all connections"                    -> JSON with masked passwords
+"Export with secrets included"             -> JSON with real credentials
+"Import these connections: { ... }"        -> creates missing connections
 ```
 
 ---
 
 ## Tool Reference
 
-26 tools in 7 categories, plus 2 MCP Resources:
+33 tools in 8 categories, plus 2 MCP Resources:
 
 | Category | Tools | Count |
 |----------|-------|:-----:|
-| **Connections** | `conn_create` `conn_list` `conn_get` `conn_set` `conn_switch` `conn_rename` `conn_delete` `conn_duplicate` `conn_test` `conn_project_list` `conn_project_clear` `conn_export` `conn_import` | 13 |
+| **Connections** | `conn_create` `conn_list` `conn_get` `conn_set` `conn_switch` `conn_rename` `conn_delete` `conn_duplicate` `conn_test` `conn_export` `conn_import` | 11 |
+| **Groups** | `conn_group_create` `conn_group_list` `conn_group_delete` `conn_group_add_scope` `conn_group_remove_scope` `conn_set_default` `conn_set_group` | 7 |
 | **Schema** | `search_schema` | 1 |
 | **Queries** | `execute_query` `execute_mutation` `explain_query` | 3 |
 | **Dump** | `db_dump` `db_restore` `db_dump_list` | 3 |
@@ -337,18 +360,16 @@ Every query logged per-project with timestamp, connection, execution time, and r
 
 Storage is split into two locations by design. This separation is intentional and solves a real problem: your credentials belong to you, your project history belongs to the project.
 
-**Global: `~/.database-mcp/`** — connections, credentials, and settings. Lives in your home directory. Never inside a project. Never in git. Never shared with anyone unless you explicitly export them.
+**Global: `~/.database-mcp/`** — groups, connections, credentials, and settings. Lives in your home directory. Never inside a project. Never in git. Never shared with anyone unless you explicitly export them.
 
 **Per-project: `{project}/.database-mcp/`** — query history, rollback snapshots, and database dumps. Lives inside the project directory and is automatically added to `.gitignore` on first write.
 
 ```
 ~/.database-mcp/                          # Global (configurable via DATABASE_MCP_DIR)
-├── connections/
-│   └── {name}.json                       # Connection configs (passwords stored locally)
-├── active-conn                           # Global active connection name
-├── config.json                           # Saved settings
-└── project-conn/
-    └── {project-hash}                    # Per-project active connection
+├── groups/                               # Connection groups with scopes and defaults
+├── connections/                          # Connection configs (credentials, chmod 600)
+├── project-conns.json                    # Session-only active connections (cleared on restart)
+└── config.json                           # Server config (limits)
 
 {your-project}/.database-mcp/            # Per-project (auto-gitignored)
 ├── history.json                          # Query history (max 5000)
@@ -357,7 +378,7 @@ Storage is split into two locations by design. This separation is intentional an
     └── {conn}-{timestamp}-{mode}.sql     # Database dumps
 ```
 
-The result: you can share a project repo freely — collaborators get the history and rollback structure, but zero credentials. They create their own connections locally.
+The result: you can share a project repo freely — collaborators get the history and rollback structure, but zero credentials. They create their own connections and groups locally.
 
 ### Configuration
 
@@ -384,9 +405,9 @@ Priority: **env var > saved config > default**.
 
 ```
 src/
-├── index.ts              # Entry point (StdioServerTransport, --dsn flag)
+├── index.ts              # Entry point (StdioServerTransport)
 ├── server.ts             # createServer() factory
-├── tools/                # 26 tool handlers (one file per category)
+├── tools/                # 33 tool handlers (one file per category)
 ├── resources/            # MCP Resources (schema auto-discovery)
 ├── services/             # Business logic
 │   ├── connection-manager    # Lazy connect, driver caching

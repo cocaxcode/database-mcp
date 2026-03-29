@@ -17,6 +17,8 @@ export interface Connection {
   password?: string
   /** Ruta al archivo SQLite */
   filepath?: string
+  /** Grupo al que pertenece (obligatorio) */
+  group: string
   createdAt: string
   updatedAt: string
 }
@@ -26,7 +28,19 @@ export interface ConnectionListItem {
   type: ConnectionType
   mode: ConnectionMode
   active: boolean
+  default: boolean
+  group: string
   database?: string
+}
+
+// ── Connection Group ──
+
+export interface ConnectionGroup {
+  name: string
+  scopes: string[]
+  default?: string
+  createdAt: string
+  updatedAt: string
 }
 
 // ── Schema ──

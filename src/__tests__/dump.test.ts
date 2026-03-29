@@ -12,6 +12,7 @@ describe('db_dump / db_restore / db_dump_list', () => {
       name: 'dump-test',
       type: 'sqlite',
       mode: 'read-write',
+      group: 'test',
     })
     await callTool(ctx.client, 'conn_switch', { name: 'dump-test' })
 

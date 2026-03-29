@@ -17,13 +17,14 @@ describe('Connection tools', () => {
       name: 'test-sqlite',
       type: 'sqlite',
       mode: 'read-write',
+      group: 'test',
     })
     expect(result.text).toContain("'test-sqlite' creada")
   })
 
   it('conn_list muestra conexiones', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'a', type: 'sqlite' })
-    await callTool(ctx.client, 'conn_create', { name: 'b', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'a', type: 'sqlite', group: 'test' })
+    await callTool(ctx.client, 'conn_create', { name: 'b', type: 'sqlite', group: 'test' })
 
     const result = await callTool(ctx.client, 'conn_list')
     const list = JSON.parse(result.text)
@@ -36,6 +37,7 @@ describe('Connection tools', () => {
       type: 'postgresql',
       host: 'localhost',
       password: 'secret',
+      group: 'test',
     })
 
     const result = await callTool(ctx.client, 'conn_get', { name: 'pg' })
@@ -44,13 +46,13 @@ describe('Connection tools', () => {
   })
 
   it('conn_set actualiza un campo', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_set', { name: 'test', key: 'mode', value: 'read-write' })
     expect(result.text).toContain('actualizado')
   })
 
   it('conn_switch cambia conexion activa', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_switch', { name: 'test' })
     expect(result.text).toContain("'test'")
 
@@ -60,37 +62,37 @@ describe('Connection tools', () => {
   })
 
   it('conn_rename renombra conexion', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'old', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'old', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_rename', { name: 'old', new_name: 'new' })
     expect(result.text).toContain("renombrada a 'new'")
   })
 
   it('conn_delete sin confirm muestra advertencia', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_delete', { name: 'test' })
     expect(result.text).toContain('Estas seguro')
   })
 
   it('conn_delete con confirm elimina', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_delete', { name: 'test', confirm: true })
     expect(result.text).toContain("'test' eliminada")
   })
 
   it('conn_duplicate duplica conexion', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'original', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'original', type: 'sqlite', group: 'test' })
     const result = await callTool(ctx.client, 'conn_duplicate', { name: 'original', new_name: 'copy' })
     expect(result.text).toContain("duplicada como 'copy'")
   })
 
   it('conn_test prueba conexion SQLite :memory:', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'mem', type: 'sqlite', mode: 'read-write' })
+    await callTool(ctx.client, 'conn_create', { name: 'mem', type: 'sqlite', mode: 'read-write', group: 'test' })
     const result = await callTool(ctx.client, 'conn_test', { name: 'mem' })
     expect(result.text).toContain('OK')
   })
 
   it('conn_project_list y conn_project_clear', async () => {
-    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite' })
+    await callTool(ctx.client, 'conn_create', { name: 'test', type: 'sqlite', group: 'test' })
     await callTool(ctx.client, 'conn_switch', { name: 'test', project: '/my/project' })
 
     const list = await callTool(ctx.client, 'conn_project_list')

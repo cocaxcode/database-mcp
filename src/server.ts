@@ -24,18 +24,26 @@ const VERSION = typeof __PKG_VERSION__ !== 'undefined' ? __PKG_VERSION__ : '0.0.
 const INSTRUCTIONS = `database-mcp conecta con bases de datos PostgreSQL, MySQL y SQLite desde tu asistente AI.
 
 FLUJO TÍPICO:
-1. Crea una conexión con conn_create (DSN o parámetros individuales).
-2. Cambia entre conexiones con conn_switch.
-3. Explora el schema con search_schema (3 niveles: names, summary, full).
-4. Ejecuta consultas de lectura con execute_query (auto-LIMIT 100).
-5. Ejecuta mutaciones con execute_mutation (crea snapshot de rollback automático).
+1. Crea un grupo con conn_group_create y añade scopes con conn_group_add_scope.
+2. Crea conexiones con conn_create (siempre pertenecen a un grupo).
+3. La primera conexion de un grupo se marca como default automaticamente.
+4. Explora el schema con search_schema (3 niveles: names, summary, full).
+5. Ejecuta consultas de lectura con execute_query (auto-LIMIT 100).
+6. Ejecuta mutaciones con execute_mutation (crea snapshot de rollback automatico).
+
+GRUPOS Y CONEXIONES:
+- Todas las conexiones pertenecen a un GRUPO. No existen conexiones globales.
+- Un grupo tiene N scopes (directorios) que comparten sus conexiones.
+- conn_list filtra automaticamente: si el CWD esta en un scope de un grupo, solo muestra conexiones de ese grupo.
+- Cada grupo tiene una conexion DEFAULT (persiste entre sesiones) y una ACTIVE (de sesion).
+- conn_switch cambia el active de sesion (no persiste). conn_set_default cambia el default (persiste).
+- Al crear una conexion: PREGUNTA al usuario a que grupo pertenece.
 
 COMPORTAMIENTO:
 - conn_delete y rollback_apply requieren confirm: true para ejecutar.
-- execute_query inyecta LIMIT automáticamente si no existe.
+- execute_query inyecta LIMIT automaticamente si no existe.
 - execute_mutation en modo read-only es bloqueada. Cambia el modo con conn_set.
 - Los rollback snapshots permiten revertir mutaciones recientes.
-- Conexiones globales en ~/.database-mcp/, datos de proyecto en .database-mcp/.
 - db_dump exporta a SQL, db_restore es destructivo (DROP + CREATE).`
 
 export function createServer(storageDir?: string, projectDir?: string): McpServer {

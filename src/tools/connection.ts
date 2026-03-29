@@ -14,10 +14,11 @@ export function registerConnectionTools(
   // ── conn_create ──
   server.tool(
     'conn_create',
-    'Crea una nueva conexion a base de datos (PostgreSQL, MySQL o SQLite).',
+    'Crea una nueva conexion a base de datos (PostgreSQL, MySQL o SQLite). SIEMPRE pregunta al usuario a que grupo pertenece.',
     {
       name: z.string().describe('Nombre de la conexion (ej: local-pg, staging-mysql)'),
       type: z.enum(['postgresql', 'mysql', 'sqlite']).describe('Tipo de base de datos'),
+      group: z.string().describe('Nombre del grupo al que pertenece. PREGUNTA AL USUARIO — si no existe se crea automaticamente'),
       mode: z.enum(['read-only', 'read-write']).default('read-only').describe('Modo de acceso (default: read-only)'),
       dsn: z.string().optional().describe('Connection string completo (ej: postgresql://user:pass@host:5432/db)'),
       host: z.string().optional().describe('Host del servidor'),
@@ -29,6 +30,12 @@ export function registerConnectionTools(
     },
     async (params) => {
       try {
+        // Crear grupo si no existe
+        const existingGroup = await storage.getGroup(params.group)
+        if (!existingGroup) {
+          await storage.createGroup(params.group)
+        }
+
         const now = new Date().toISOString()
         const conn: Connection = {
           name: params.name,
@@ -41,12 +48,20 @@ export function registerConnectionTools(
           user: params.user,
           password: params.password,
           filepath: params.filepath,
+          group: params.group,
           createdAt: now,
           updatedAt: now,
         }
 
         await storage.createConnection(conn)
-        return text(`Conexion '${params.name}' creada (${params.type}, ${params.mode ?? 'read-only'})`)
+
+        // Si es la primera conexion del grupo y no hay default, marcarla
+        const group = await storage.getGroup(params.group)
+        if (group && !group.default) {
+          await storage.setGroupDefault(params.group, params.name)
+        }
+
+        return text(`Conexion '${params.name}' creada (${params.type}, ${params.mode ?? 'read-only'}) — grupo: '${params.group}'`)
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))
       }
@@ -138,19 +153,18 @@ export function registerConnectionTools(
   // ── conn_switch ──
   server.tool(
     'conn_switch',
-    'Cambia la conexion activa. Si se especifica project, solo aplica a ese directorio.',
+    'Cambia la conexion activa (de sesion). Para cambiar el default permanente usa conn_set_default.',
     {
       name: z.string().describe('Nombre de la conexion a activar'),
-      project: z.string().optional().describe('Ruta del proyecto (si se omite, cambia global)'),
+      project: z.string().optional().describe('Ruta del proyecto (si se omite, usa el directorio actual)'),
     },
     async (params) => {
       try {
-        // Desconectar driver actual
         await manager.disconnectActive()
 
         await storage.setActiveConnection(params.name, params.project)
-        const scope = params.project ? ` para proyecto '${params.project}'` : ' (global)'
-        return text(`Conexion activa cambiada a '${params.name}'${scope}`)
+        const scope = params.project ?? process.cwd()
+        return text(`Conexion activa cambiada a '${params.name}' para '${scope}'`)
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))
       }
@@ -402,6 +416,134 @@ export function registerConnectionTools(
 
         const summary = `${imported} importada(s), ${skipped} omitida(s)`
         return text(`Importacion completada: ${summary}\n\n${results.join('\n')}`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_group_create ──
+  server.tool(
+    'conn_group_create',
+    'Crea un nuevo grupo de conexiones. Luego añade scopes (directorios) con conn_group_add_scope.',
+    {
+      name: z.string().describe('Nombre del grupo (ej: cocaxcode, optimizatusol)'),
+    },
+    async (params) => {
+      try {
+        await storage.createGroup(params.name)
+        return text(`Grupo '${params.name}' creado. Usa conn_group_add_scope para añadir directorios.`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_group_list ──
+  server.tool(
+    'conn_group_list',
+    'Lista todos los grupos con sus scopes, default y conexiones.',
+    {},
+    async () => {
+      try {
+        const groups = await storage.listGroups()
+        if (groups.length === 0) {
+          return text('No hay grupos configurados. Usa conn_group_create para crear uno.')
+        }
+        return text(JSON.stringify(groups, null, 2))
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_group_delete ──
+  server.tool(
+    'conn_group_delete',
+    'Elimina un grupo. Las conexiones del grupo NO se eliminan pero quedaran huerfanas.',
+    {
+      name: z.string().describe('Nombre del grupo a eliminar'),
+    },
+    async (params) => {
+      try {
+        await storage.deleteGroup(params.name)
+        return text(`Grupo '${params.name}' eliminado.`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_group_add_scope ──
+  server.tool(
+    'conn_group_add_scope',
+    'Añade un directorio (scope) a un grupo. Las conexiones del grupo seran accesibles desde ese directorio.',
+    {
+      group: z.string().describe('Nombre del grupo'),
+      scope: z.string().optional().describe('Ruta del directorio. Si se omite, usa el directorio actual'),
+    },
+    async (params) => {
+      try {
+        const scope = params.scope ?? process.cwd()
+        await storage.addScopeToGroup(params.group, scope)
+        return text(`Scope '${scope}' añadido al grupo '${params.group}'`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_group_remove_scope ──
+  server.tool(
+    'conn_group_remove_scope',
+    'Quita un directorio (scope) de un grupo.',
+    {
+      group: z.string().describe('Nombre del grupo'),
+      scope: z.string().optional().describe('Ruta del directorio a quitar. Si se omite, usa el directorio actual'),
+    },
+    async (params) => {
+      try {
+        const scope = params.scope ?? process.cwd()
+        await storage.removeScopeFromGroup(params.group, scope)
+        return text(`Scope '${scope}' eliminado del grupo '${params.group}'`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_set_default ──
+  server.tool(
+    'conn_set_default',
+    'Marca una conexion como el default de su grupo. El default se activa automaticamente al entrar al proyecto.',
+    {
+      name: z.string().describe('Nombre de la conexion a marcar como default'),
+    },
+    async (params) => {
+      try {
+        const conn = await storage.getConnection(params.name)
+        if (!conn) return error(`Conexion '${params.name}' no encontrada`)
+        if (!conn.group) return error(`La conexion '${params.name}' no pertenece a ningun grupo`)
+        await storage.setGroupDefault(conn.group, params.name)
+        return text(`Conexion '${params.name}' marcada como default del grupo '${conn.group}'`)
+      } catch (e) {
+        return error(e instanceof Error ? e.message : String(e))
+      }
+    },
+  )
+
+  // ── conn_set_group ──
+  server.tool(
+    'conn_set_group',
+    'Asigna o cambia el grupo de una conexion existente.',
+    {
+      connection: z.string().describe('Nombre de la conexion'),
+      group: z.string().describe('Nombre del grupo'),
+    },
+    async (params) => {
+      try {
+        await storage.setConnectionGroup(params.connection, params.group)
+        return text(`Conexion '${params.connection}' asignada al grupo '${params.group}'`)
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))
       }
