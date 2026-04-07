@@ -8,6 +8,43 @@ import { executeRead, executeMutation, executeExplain } from '../services/query-
 import { classifySql } from '../utils/sql-classifier.js'
 import { formatQueryResult } from '../utils/result-formatter.js'
 import { text, error } from '../lib/response.js'
+import { extractTablesFromSql } from '../utils/sql-table-extractor.js'
+import { SchemaIntrospector } from '../services/schema-introspector.js'
+import type { DatabaseDriver } from '../drivers/interface.js'
+
+/**
+ * Obtiene el schema resumido de las tablas referenciadas en un SQL.
+ * Silencia errores para no bloquear la query principal.
+ */
+async function getSchemaContext(driver: DatabaseDriver, sql: string): Promise<string> {
+  try {
+    const tableNames = extractTablesFromSql(sql)
+    if (tableNames.length === 0) return ''
+
+    const schemas: string[] = []
+    for (const tableName of tableNames) {
+      try {
+        const columns = await SchemaIntrospector.getColumns(driver, tableName)
+        if (columns.length > 0) {
+          const cols = columns.map((c) => {
+            const parts = [c.name, c.type]
+            if (c.isPrimaryKey) parts.push('PK')
+            if (!c.nullable) parts.push('NOT NULL')
+            return parts.join(' ')
+          })
+          schemas.push(`${tableName}(${cols.join(', ')})`)
+        }
+      } catch {
+        // Tabla no encontrada o error de permisos — ignorar
+      }
+    }
+
+    if (schemas.length === 0) return ''
+    return `\n\n--- Schema de tablas referenciadas ---\n${schemas.join('\n')}`
+  } catch {
+    return ''
+  }
+}
 
 export function registerQueryTools(
   server: McpServer,
@@ -46,7 +83,8 @@ export function registerQueryTools(
             success: true,
           })
 
-          return text(formatQueryResult(result))
+          const schemaCtx = await getSchemaContext(driver, params.sql)
+          return text(formatQueryResult(result) + schemaCtx)
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({
@@ -59,7 +97,9 @@ export function registerQueryTools(
             success: false,
             error: e instanceof Error ? e.message : String(e),
           })
-          return error(e instanceof Error ? e.message : String(e))
+          const schemaCtx = await getSchemaContext(driver, params.sql)
+          const errMsg = e instanceof Error ? e.message : String(e)
+          return error(errMsg + schemaCtx)
         }
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))
@@ -126,7 +166,8 @@ export function registerQueryTools(
           })
 
           const rollbackMsg = rollbackId ? `\nRollback disponible: ${rollbackId}` : ''
-          return text(formatQueryResult(result) + rollbackMsg)
+          const schemaCtx = await getSchemaContext(driver, params.sql)
+          return text(formatQueryResult(result) + rollbackMsg + schemaCtx)
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({
@@ -139,7 +180,9 @@ export function registerQueryTools(
             success: false,
             error: e instanceof Error ? e.message : String(e),
           })
-          return error(e instanceof Error ? e.message : String(e))
+          const schemaCtx = await getSchemaContext(driver, params.sql)
+          const errMsg = e instanceof Error ? e.message : String(e)
+          return error(errMsg + schemaCtx)
         }
       } catch (e) {
         return error(e instanceof Error ? e.message : String(e))

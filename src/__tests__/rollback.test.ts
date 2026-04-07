@@ -50,7 +50,7 @@ describe('Rollback tools', () => {
 
     // Verificar que Bob fue eliminado
     const check1 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
-    const data1 = JSON.parse(check1.text.split('\n\nNota:')[0])
+    const data1 = JSON.parse(check1.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data1.rowCount).toBe(1)
 
     // Aplicar rollback
@@ -59,7 +59,7 @@ describe('Rollback tools', () => {
 
     // Verificar que Bob esta de vuelta
     const check2 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
-    const data2 = JSON.parse(check2.text.split('\n\nNota:')[0])
+    const data2 = JSON.parse(check2.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data2.rowCount).toBe(2)
   })
 
@@ -76,7 +76,7 @@ describe('Rollback tools', () => {
 
     // Verificar que Charlie existe (3 users)
     const check1 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
-    const data1 = JSON.parse(check1.text.split('\n\nNota:')[0])
+    const data1 = JSON.parse(check1.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data1.rowCount).toBe(3)
 
     // Aplicar rollback del INSERT
@@ -85,7 +85,7 @@ describe('Rollback tools', () => {
 
     // Verificar que Charlie fue eliminado (2 users)
     const check2 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM users' })
-    const data2 = JSON.parse(check2.text.split('\n\nNota:')[0])
+    const data2 = JSON.parse(check2.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data2.rowCount).toBe(2)
   })
 
@@ -109,7 +109,7 @@ describe('Rollback tools', () => {
 
     // Verificar eliminado
     const check1 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM items' })
-    const data1 = JSON.parse(check1.text.split('\n\nNota:')[0])
+    const data1 = JSON.parse(check1.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data1.rowCount).toBe(0)
 
     // Rollback
@@ -118,7 +118,7 @@ describe('Rollback tools', () => {
 
     // Verificar restaurado
     const check2 = await callTool(ctx.client, 'execute_query', { sql: 'SELECT * FROM items' })
-    const data2 = JSON.parse(check2.text.split('\n\nNota:')[0])
+    const data2 = JSON.parse(check2.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
     expect(data2.rowCount).toBe(1)
   })
 

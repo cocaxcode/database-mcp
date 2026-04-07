@@ -31,7 +31,7 @@ describe('Query tools', () => {
       const result = await callTool(ctx.client, 'execute_query', {
         sql: 'SELECT * FROM users',
       })
-      const data = JSON.parse(result.text.split('\n\nNota:')[0])
+      const data = JSON.parse(result.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
       expect(data.rowCount).toBe(2)
       expect(data.columns).toContain('name')
     })
@@ -41,7 +41,7 @@ describe('Query tools', () => {
         sql: 'SELECT * FROM users',
         limit: 1,
       })
-      const data = JSON.parse(result.text.split('\n\nNota:')[0])
+      const data = JSON.parse(result.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
       expect(data.rowCount).toBe(1)
     })
 
@@ -79,7 +79,7 @@ describe('Query tools', () => {
       const check = await callTool(ctx.client, 'execute_query', {
         sql: 'SELECT * FROM users',
       })
-      const data = JSON.parse(check.text.split('\n\nNota:')[0])
+      const data = JSON.parse(check.text.split(/\n\n(?:Nota:|--- Schema)/)[0])
       expect(data.rowCount).toBe(1)
     })
 
@@ -91,6 +91,35 @@ describe('Query tools', () => {
       })
       expect(result.isError).toBe(true)
       expect(result.text).toContain('read-only')
+    })
+  })
+
+  describe('schema context', () => {
+    it('incluye schema de tablas referenciadas en respuesta de query', async () => {
+      const result = await callTool(ctx.client, 'execute_query', {
+        sql: 'SELECT * FROM users',
+      })
+      expect(result.text).toContain('--- Schema de tablas referenciadas ---')
+      expect(result.text).toContain('users(')
+      expect(result.text).toContain('name TEXT')
+      expect(result.text).toContain('email TEXT')
+    })
+
+    it('incluye schema en respuesta de error', async () => {
+      const result = await callTool(ctx.client, 'execute_query', {
+        sql: 'SELECT nonexistent_column FROM users',
+      })
+      expect(result.isError).toBe(true)
+      expect(result.text).toContain('--- Schema de tablas referenciadas ---')
+      expect(result.text).toContain('users(')
+    })
+
+    it('incluye schema en respuesta de mutation', async () => {
+      const result = await callTool(ctx.client, 'execute_mutation', {
+        sql: "INSERT INTO users (name, email) VALUES ('Test', 'test@test.com')",
+      })
+      expect(result.text).toContain('--- Schema de tablas referenciadas ---')
+      expect(result.text).toContain('users(')
     })
   })
 
