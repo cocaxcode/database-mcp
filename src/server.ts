@@ -11,6 +11,8 @@ import { registerRollbackTools } from './tools/rollback.js'
 import { registerHistoryTools } from './tools/history.js'
 import { registerConfigTools } from './tools/config.js'
 import { registerDumpTools } from './tools/dump.js'
+import { registerInspectTools } from './tools/inspect.js'
+import { QueryCache } from './services/query-cache.js'
 import { registerSchemaResources } from './resources/schema.js'
 import { ensureGitignore } from './utils/gitignore-checker.js'
 
@@ -61,6 +63,7 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   const rollbackMgr = new RollbackManager(effectiveProjectDir)
   const historyLogger = new HistoryLogger(effectiveProjectDir)
   const dumpMgr = new DumpManager(effectiveProjectDir)
+  const queryCache = new QueryCache(storage.baseDir)
 
   // Asegurar que .database-mcp/ esta en .gitignore del proyecto
   ensureGitignore(effectiveProjectDir).catch((e) => {
@@ -78,11 +81,12 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   // Registrar tools
   registerConnectionTools(server, storage, manager)
   registerSchemaTools(server, manager)
-  registerQueryTools(server, storage, manager, rollbackMgr, historyLogger)
+  registerQueryTools(server, storage, manager, rollbackMgr, historyLogger, queryCache)
   registerRollbackTools(server, rollbackMgr, manager)
   registerHistoryTools(server, historyLogger)
   registerConfigTools(server, storage, rollbackMgr, historyLogger)
   registerDumpTools(server, storage, manager, dumpMgr)
+  registerInspectTools(server, queryCache)
 
   // Registrar resources
   registerSchemaResources(server, manager)

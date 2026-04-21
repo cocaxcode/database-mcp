@@ -2,7 +2,21 @@
 
 ## Project Overview
 
-MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 26 tools, 101 tests.
+MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 27 tools, 157 tests.
+
+## Token-optimized query results (v0.3+)
+
+`execute_query`, `execute_mutation`, `explain_query` accept optional params that cut context tokens 60-95%:
+
+- `verbosity: 'minimal' | 'normal' | 'full'` (default `'normal'`)
+- `only_columns: string[]` — client-side column projection
+- `max_cell_bytes: number` (default 500) — per-cell byte cap for `'normal'`
+- `max_rows_in_response: number` — row cap beyond SQL LIMIT
+- `include_schema_context: boolean` — skip schema trail when known
+
+Every compressed result includes `call_id`. Use `inspect_last_query({ call_id })` to recover the full result without re-executing the SQL (preserves DB load). Ring buffer 20 + `~/.database-mcp/last-queries/` with 1h TTL.
+
+Cell truncation preserves table structure: truncated cells get a `…(+NB)` suffix. Much better than the old global 25KB truncation that cut trailing rows.
 
 ## Stack
 

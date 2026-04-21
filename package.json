@@ -1,8 +1,8 @@
 {
   "name": "@cocaxcode/database-mcp",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "mcpName": "io.github.cocaxcode/database-mcp",
-  "description": "MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback, history, elicitation for destructive ops, and prepared statements. Zero config.",
+  "description": "MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with token-optimized responses, rollback, history, elicitation for destructive ops, and prepared statements. Zero config.",
   "type": "module",
   "bin": {
     "database-mcp": "dist/index.js"

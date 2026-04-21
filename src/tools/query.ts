@@ -3,14 +3,20 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ConnectionManager } from '../services/connection-manager.js'
 import type { RollbackManager } from '../services/rollback-manager.js'
 import type { HistoryLogger } from '../services/history-logger.js'
+import type { QueryCache } from '../services/query-cache.js'
 import type { Storage } from '../lib/storage.js'
 import { executeRead, executeMutation, executeExplain } from '../services/query-executor.js'
 import { classifySql } from '../utils/sql-classifier.js'
-import { formatQueryResult } from '../utils/result-formatter.js'
 import { text, error } from '../lib/response.js'
 import { extractTablesFromSql } from '../utils/sql-table-extractor.js'
 import { SchemaIntrospector } from '../services/schema-introspector.js'
 import type { DatabaseDriver } from '../drivers/interface.js'
+import {
+  compressQueryResult,
+  formatCompressedResult,
+  makeQueryCallId,
+} from '../utils/compress-query.js'
+import { QueryVerbosityShape } from '../lib/query-schemas.js'
 
 /**
  * Obtiene el schema resumido de las tablas referenciadas en un SQL.
@@ -52,15 +58,23 @@ export function registerQueryTools(
   manager: ConnectionManager,
   rollbackMgr: RollbackManager,
   historyLogger: HistoryLogger,
+  queryCache: QueryCache,
 ): void {
   // ── execute_query ──
   server.tool(
     'execute_query',
-    'Ejecuta una consulta de lectura (SELECT, SHOW, etc.). Inyecta LIMIT automaticamente.',
+    'Ejecuta una consulta de lectura (SELECT, SHOW, etc.). Inyecta LIMIT automaticamente. El result se comprime por defecto (verbosity=normal, celdas truncadas a 500 bytes) para ahorrar tokens; usa inspect_last_query con el call_id para recuperar el result completo sin re-ejecutar.',
     {
       sql: z.string().describe('Consulta SQL de lectura'),
       params: z.array(z.unknown()).optional().describe('Parametros para prepared statement'),
       limit: z.number().optional().describe('Limite de filas (default: 100)'),
+      include_schema_context: z
+        .boolean()
+        .optional()
+        .describe(
+          "Añade un resumen del schema de las tablas referenciadas al final del output (default: true para 'full'/'normal', false para 'minimal'). Ponlo a false si ya conoces el schema.",
+        ),
+      ...QueryVerbosityShape,
     },
     async (params) => {
       try {
@@ -71,6 +85,7 @@ export function registerQueryTools(
         try {
           const result = await executeRead(driver, params.sql, params.params, params.limit)
           const executionTimeMs = Math.round(performance.now() - start)
+          result.executionTimeMs = executionTimeMs
 
           await historyLogger.log({
             sql: params.sql,
@@ -83,8 +98,22 @@ export function registerQueryTools(
             success: true,
           })
 
-          const schemaCtx = await getSchemaContext(driver, params.sql)
-          return text(formatQueryResult(result) + schemaCtx)
+          const callId = makeQueryCallId()
+          await queryCache.save(callId, params.sql, connName, result)
+
+          const compressed = compressQueryResult(result, {
+            verbosity: params.verbosity,
+            only_columns: params.only_columns,
+            max_cell_bytes: params.max_cell_bytes,
+            max_rows_in_response: params.max_rows_in_response,
+            call_id: callId,
+          })
+
+          const verbosity = params.verbosity ?? 'normal'
+          const includeSchema =
+            params.include_schema_context ?? verbosity !== 'minimal'
+          const schemaCtx = includeSchema ? await getSchemaContext(driver, params.sql) : ''
+          return text(formatCompressedResult(compressed, schemaCtx))
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({
@@ -110,10 +139,11 @@ export function registerQueryTools(
   // ── execute_mutation ──
   server.tool(
     'execute_mutation',
-    'Ejecuta una mutacion (INSERT, UPDATE, DELETE, DDL). Pide confirmacion y crea snapshot para rollback.',
+    'Ejecuta una mutacion (INSERT, UPDATE, DELETE, DDL). Pide confirmacion y crea snapshot para rollback. El result se comprime por defecto — para mutations usa verbosity=minimal si solo te interesa affectedRows.',
     {
       sql: z.string().describe('Sentencia SQL de escritura'),
       params: z.array(z.unknown()).optional().describe('Parametros para prepared statement'),
+      ...QueryVerbosityShape,
     },
     async (params) => {
       try {
@@ -144,6 +174,7 @@ export function registerQueryTools(
         try {
           const result = await executeMutation(driver, params.sql, params.params)
           const executionTimeMs = Math.round(performance.now() - start)
+          result.executionTimeMs = executionTimeMs
 
           // Completar snapshot de INSERT con datos post-insert
           if (rollbackId && sqlType !== 'ddl') {
@@ -165,9 +196,20 @@ export function registerQueryTools(
             success: true,
           })
 
+          const callId = makeQueryCallId()
+          await queryCache.save(callId, params.sql, connName, result)
+
+          const compressed = compressQueryResult(result, {
+            verbosity: params.verbosity,
+            only_columns: params.only_columns,
+            max_cell_bytes: params.max_cell_bytes,
+            max_rows_in_response: params.max_rows_in_response,
+            call_id: callId,
+          })
+
           const rollbackMsg = rollbackId ? `\nRollback disponible: ${rollbackId}` : ''
           const schemaCtx = await getSchemaContext(driver, params.sql)
-          return text(formatQueryResult(result) + rollbackMsg + schemaCtx)
+          return text(formatCompressedResult(compressed, rollbackMsg + schemaCtx))
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({
@@ -198,6 +240,7 @@ export function registerQueryTools(
       sql: z.string().describe('Consulta SQL a analizar'),
       params: z.array(z.unknown()).optional().describe('Parametros'),
       analyze: z.boolean().default(false).describe('Ejecutar ANALYZE (ojo: ejecuta la query realmente)'),
+      ...QueryVerbosityShape,
     },
     async (params) => {
       try {
@@ -208,6 +251,7 @@ export function registerQueryTools(
         try {
           const result = await executeExplain(driver, params.sql, params.params, params.analyze)
           const executionTimeMs = Math.round(performance.now() - start)
+          result.executionTimeMs = executionTimeMs
 
           await historyLogger.log({
             sql: `EXPLAIN ${params.sql}`,
@@ -219,7 +263,18 @@ export function registerQueryTools(
             success: true,
           })
 
-          return text(formatQueryResult(result))
+          const callId = makeQueryCallId()
+          await queryCache.save(callId, `EXPLAIN ${params.sql}`, connName, result)
+
+          const compressed = compressQueryResult(result, {
+            verbosity: params.verbosity,
+            only_columns: params.only_columns,
+            max_cell_bytes: params.max_cell_bytes,
+            max_rows_in_response: params.max_rows_in_response,
+            call_id: callId,
+          })
+
+          return text(formatCompressedResult(compressed))
         } catch (e) {
           const executionTimeMs = Math.round(performance.now() - start)
           await historyLogger.log({

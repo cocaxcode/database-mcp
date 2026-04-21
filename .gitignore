@@ -7,3 +7,4 @@ coverage/
 .idea/
 .claude/
 .env
+.token-optimizer/

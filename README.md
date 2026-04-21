@@ -299,6 +299,50 @@ MCP Resources (`db://schema` and `db://tables/{name}/schema`) give AI agents aut
   -> EXPLAIN ANALYZE with dialect-specific syntax (PostgreSQL/MySQL/SQLite)
 ```
 
+### Token Optimization (v0.3+)
+
+SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row. AI agents pay for every byte that reaches the context window. `execute_query`, `execute_mutation` and `explain_query` accept four optional parameters that cut 60-95% of those tokens while keeping rows and structure intact.
+
+| Param | Values | What it does |
+|---|---|---|
+| `verbosity` | `'minimal'` / `'normal'` (default) / `'full'` | Controls detail level |
+| `only_columns` | `['id', 'title']` | Returns only these columns (client-side projection) |
+| `max_cell_bytes` | number (default `500`) | Per-cell byte cap for `'normal'` |
+| `max_rows_in_response` | number | Row cap beyond SQL LIMIT |
+
+**Modes:**
+
+- **`minimal`** — only `rowCount`, `executionTimeMs`, `affectedRows`, and a preview of the first row. Ideal for INSERT/UPDATE/DELETE confirmation, COUNT queries, polling. *Saves ~90-95% tokens.*
+- **`normal`** *(default)* — full rows, but each cell truncated to `max_cell_bytes` with a `…(+NB)` marker. Preserves table structure. *Saves ~60-80% tokens on wide rows.*
+- **`full`** — entire result untouched. Use when you need the complete value of every cell.
+
+**Typical savings on `SELECT * FROM blog LIMIT 100`** where `content` is ~2KB HTML per row (~200KB total):
+
+| Mode | Tokens consumed | Savings |
+|---|---|---|
+| `full` | ~50,000 | 0% (baseline) |
+| `normal` (500B cells) | ~12,500 | ~75% |
+| `only_columns: ['id','title','slug']` | ~2,500 | ~95% |
+| `minimal` | ~300 | ~99% |
+
+**Recovering the full result:** every compressed response includes a `call_id`. If you need the complete cells later, call `inspect_last_query({ call_id })` — **without re-executing the SQL**, preserving DB load and any side-effects. Results are kept in a 20-slot ring buffer and persisted to `~/.database-mcp/last-queries/` with a 1-hour TTL.
+
+```json
+// Example: normal (default) response
+{
+  "call_id": "k3m9a2xp",
+  "columns": ["id", "title", "content"],
+  "rows": [
+    { "id": 1, "title": "Hello", "content": "<h1>Long HTML…(+1847B)" }
+  ],
+  "rowCount": 1,
+  "executionTimeMs": 12,
+  "cells_truncated": 1,
+  "hint": "1 cell(s) truncated to 500 bytes. Use inspect_last_query({ call_id: \"k3m9a2xp\" }) for full values.",
+  "tokens_saved_estimate": 462
+}
+```
+
 ### Dump and restore
 
 Full database backup in SQL format — structure only or structure + data.
