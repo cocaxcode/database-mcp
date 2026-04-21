@@ -299,7 +299,7 @@ MCP Resources (`db://schema` and `db://tables/{name}/schema`) give AI agents aut
   -> EXPLAIN ANALYZE with dialect-specific syntax (PostgreSQL/MySQL/SQLite)
 ```
 
-### Token Optimization (v0.3+)
+### Compression modes (v0.3+)
 
 SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row. AI agents pay for every byte that reaches the context window. `execute_query`, `execute_mutation` and `explain_query` accept four optional parameters that cut 60-95% of those tokens while keeping rows and structure intact.
 
@@ -316,7 +316,7 @@ SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row
 - **`normal`** *(default)* — full rows, but each cell truncated to `max_cell_bytes` with a `…(+NB)` marker. Preserves table structure. *Saves ~60-80% tokens on wide rows.*
 - **`full`** — entire result untouched. Use when you need the complete value of every cell.
 
-**Typical savings on `SELECT * FROM blog LIMIT 100`** where `content` is ~2KB HTML per row (~200KB total):
+**Typical savings on `SELECT * FROM blog_posts LIMIT 100`** where `content` is ~2KB HTML per row (~200KB total):
 
 | Mode | Tokens consumed | Savings |
 |---|---|---|
@@ -324,6 +324,8 @@ SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row
 | `normal` (500B cells) | ~12,500 | ~75% |
 | `only_columns: ['id','title','slug']` | ~2,500 | ~95% |
 | `minimal` | ~300 | ~99% |
+
+> For a head-to-head comparison against raw `psql` with measured numbers, see [Native alternatives](#native-alternatives-real-token-cost) below.
 
 **Recovering the full result:** every compressed response includes a `call_id`. If you need the complete cells later, call `inspect_last_query({ call_id })` — **without re-executing the SQL**, preserving DB load and any side-effects. Results are kept in a 20-slot ring buffer and persisted to `~/.database-mcp/last-queries/` with a 1-hour TTL.
 
@@ -343,7 +345,9 @@ SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row
 }
 ```
 
-### Native vs MCP: real token cost
+### Native alternatives: real token cost
+
+How this MCP compares against the native options Claude Code has when `database` is not available (Bash + `psql`, `sqlite3`, `mysql` CLI, etc.).
 
 **TL;DR**: compared to raw `psql`, `execute_query` saves between **78% and 96%** of context tokens depending on the mode, with no loss of debugging information. Measured on a real call to `SELECT * FROM blog_posts LIMIT 5` on a PostgreSQL table with a `content` column of ~1 KB of HTML per row:
 
@@ -356,10 +360,13 @@ SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row
 | `execute_query` verbosity=`minimal` | ✅ MCP | ~80 | **−96%** |
 | `execute_query` with `only_columns: ["id","title","slug"]` | ✅ MCP | ~130 | **−93%** |
 
+> Why this table's numbers differ from the "Compression modes" section above: these come from a 5-row real-world query, while the previous table extrapolates to a 100-row result with heavier content. Trend and order of magnitude are the same.
+
 Notes:
 
 - Raw `psql` output gets worse as rows grow — JSONB and long TEXT columns have no native filter. The MCP cell-truncation preserves structure (row count + column list) while collapsing heavy cells with a `…(+NB)` marker.
 - `inspect_last_query` recovers the complete result **without re-running the SQL**. With `psql` you would have to re-execute, paying DB CPU again and risking re-triggering side-effects on `RETURNING` clauses.
+- The MCP also adds features that have no direct native equivalent: connection groups scoped to project directories, automatic rollback snapshots on mutations, query history, schema introspection via MCP Resources, and dump/restore.
 - Schema context is added at the end of the response when relevant (default `true` for `normal`/`full`). Disable with `include_schema_context: false` if the agent already knows the schema.
 - Every registered MCP adds a fixed overhead of ~300-600 tokens per session (its instructions block + tool names). Typical break-even: 1 real query per session.
 

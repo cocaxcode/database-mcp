@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+### Docs
+
+- README polish: renamed `Token Optimization` → `Compression modes` and `Native vs MCP` → `Native alternatives`. Added a connector link from the first section to the second and a note explaining the difference between the two savings tables (extrapolated 100-row result vs real-world 5-row query). Fixed table name inconsistency (`blog` → `blog_posts`) and replaced the schema-context note with one that highlights MCP-only features (connection groups, rollback snapshots, history, MCP Resources, dump/restore).
+
 ## 0.3.3
 
 ### Docs
