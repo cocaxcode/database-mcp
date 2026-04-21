@@ -345,20 +345,20 @@ SQL results often carry TEXT / JSON / HTML columns that can be kilobytes per row
 
 ### Native vs MCP: real token cost
 
-Concrete measurements from a real call to `SELECT * FROM blog_posts LIMIT 5` on a PostgreSQL table with a `content` column of ~1 KB HTML per row:
+**TL;DR**: compared to raw `psql`, `execute_query` saves between **78% and 96%** of context tokens depending on the mode, with no loss of debugging information. Measured on a real call to `SELECT * FROM blog_posts LIMIT 5` on a PostgreSQL table with a `content` column of ~1 KB of HTML per row:
 
-| How the agent calls it | Tokens consumed | Delta vs psql |
-|---|---|---|
-| `Bash` + `psql -c "..."` (raw tabular output) | ~1,800 | baseline |
-| `Bash` + psql + manual `awk`/column filter | fragile, agent-assembled | hard to measure |
-| `execute_query` verbosity=`full` | ~1,500 | −17% (less formatting overhead) |
-| **`execute_query` verbosity=`normal`** *(default, cells capped at 500 B)* | **~400** | **−78%** |
-| `execute_query` verbosity=`minimal` | ~80 | **−96%** |
-| `execute_query` with `only_columns: ["id","title","slug"]` | ~130 | **−93%** |
+| How the agent calls it | Uses MCP? | Tokens consumed | Delta vs psql |
+|---|:-:|---|---|
+| `Bash` + `psql -c "..."` (raw tabular output) | ❌ native | ~1,800 | baseline |
+| `Bash` + psql + manual `awk`/column filter | ❌ native | fragile, agent-assembled | hard to measure |
+| `execute_query` verbosity=`full` | ✅ MCP | ~1,500 | −17% (less formatting overhead) |
+| **`execute_query` verbosity=`normal`** *(default, cells capped at 500 B)* | ✅ MCP | **~400** | **−78%** |
+| `execute_query` verbosity=`minimal` | ✅ MCP | ~80 | **−96%** |
+| `execute_query` with `only_columns: ["id","title","slug"]` | ✅ MCP | ~130 | **−93%** |
 
 Notes:
 
-- Raw `psql` output gets worse as rows grow — JSONB and long TEXT columns have no native filter. The MCP cell-truncation preserves structure (row count + column list) while collapsing heavy cells.
+- Raw `psql` output gets worse as rows grow — JSONB and long TEXT columns have no native filter. The MCP cell-truncation preserves structure (row count + column list) while collapsing heavy cells with a `…(+NB)` marker.
 - `inspect_last_query` recovers the complete result **without re-running the SQL**. With `psql` you would have to re-execute, paying DB CPU again and risking re-triggering side-effects on `RETURNING` clauses.
 - Schema context is added at the end of the response when relevant (default `true` for `normal`/`full`). Disable with `include_schema_context: false` if the agent already knows the schema.
 - Every registered MCP adds a fixed overhead of ~300-600 tokens per session (its instructions block + tool names). Typical break-even: 1 real query per session.

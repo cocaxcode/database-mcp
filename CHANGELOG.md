@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+### Docs
+
+- "Native vs MCP" section: added upfront TL;DR line (78-96% savings vs raw psql) and a new "Uses MCP?" column in the comparison table to make at a glance which rows are native and which go through the MCP.
+
 ## 0.3.2
 
 ### Docs
