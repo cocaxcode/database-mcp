@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+### Docs
+
+- Added **"Native vs MCP: real token cost"** section to the README with a concrete comparison table (psql raw vs full/normal/minimal/only_columns) based on a measured real-world query. Clarifies why `inspect_last_query` is especially valuable for SQL (no DB CPU re-cost, no re-triggered side-effects on RETURNING).
+
 ## 0.3.1
 
 ### Fixed
