@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+- `explain_query` and other queries from the postgres driver no longer include a cosmetic `"affectedRows": null` field in the compressed output. The compressor now filters both `undefined` and `null` values.
+
 ## 0.3.0
 
 ### Added

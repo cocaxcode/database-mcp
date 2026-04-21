@@ -105,7 +105,7 @@ export function compressQueryResult(
     executionTimeMs: result.executionTimeMs,
     original_cell_bytes: originalCellBytes,
   }
-  if (result.affectedRows !== undefined) base.affectedRows = result.affectedRows
+  if (result.affectedRows != null) base.affectedRows = result.affectedRows
 
   // MINIMAL — sólo metadata + primera fila preview
   if (verbosity === 'minimal') {

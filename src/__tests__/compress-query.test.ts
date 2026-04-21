@@ -66,6 +66,16 @@ describe('compressQueryResult', () => {
       const out = compressQueryResult(res, { verbosity: 'minimal' })
       expect(out.affectedRows).toBe(5)
     })
+
+    it('omite affectedRows cuando es null (EXPLAIN)', () => {
+      const res = buildResult({
+        rows: [],
+        rowCount: 1,
+        affectedRows: null as unknown as number,
+      })
+      const out = compressQueryResult(res, { verbosity: 'minimal' })
+      expect('affectedRows' in out).toBe(false)
+    })
   })
 
   describe("verbosity='normal' (default)", () => {
