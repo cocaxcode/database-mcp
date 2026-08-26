@@ -14,7 +14,6 @@ import { registerDumpTools } from './tools/dump.js'
 import { registerInspectTools } from './tools/inspect.js'
 import { QueryCache } from './services/query-cache.js'
 import { registerSchemaResources } from './resources/schema.js'
-import { ensureGitignore } from './utils/gitignore-checker.js'
 
 declare const __PKG_VERSION__: string
 const VERSION = typeof __PKG_VERSION__ !== 'undefined' ? __PKG_VERSION__ : '0.0.0'
@@ -65,10 +64,9 @@ export function createServer(storageDir?: string, projectDir?: string): McpServe
   const dumpMgr = new DumpManager(effectiveProjectDir)
   const queryCache = new QueryCache(storage.baseDir)
 
-  // Asegurar que .database-mcp/ esta en .gitignore del proyecto
-  ensureGitignore(effectiveProjectDir).catch((e) => {
-    console.error(`database-mcp: no se pudo actualizar .gitignore: ${e instanceof Error ? e.message : String(e)}`)
-  })
+  // NOTA: .gitignore NO se toca aqui. Se actualiza de forma perezosa la primera
+  // vez que se crea {projectDir}/.database-mcp/ (ver utils/project-storage.ts),
+  // asi un proyecto que solo abre el server no ve cambios en su repo.
 
   // Cargar config y aplicar limites
   const applyConfig = async () => {

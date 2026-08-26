@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HistoryEntry } from '../lib/types.js'
+import { ensureProjectStorage } from '../utils/project-storage.js'
 
 export class HistoryLogger {
   private readonly projectDir: string
@@ -18,10 +19,10 @@ export class HistoryLogger {
 
   /**
    * Registra una entrada en el historial.
-   * En la primera escritura, anade .database-mcp/ al .gitignore automaticamente.
+   * En la primera escritura crea .database-mcp/ y lo anade al .gitignore.
    */
   async log(entry: Omit<HistoryEntry, 'id'>): Promise<void> {
-    await mkdir(join(this.projectDir, '.database-mcp'), { recursive: true })
+    await ensureProjectStorage(this.projectDir)
 
     const entries = await this.readEntries()
     const newId = entries.length > 0 ? Math.max(...entries.map((e) => e.id)) + 1 : 1

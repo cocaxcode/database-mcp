@@ -1,10 +1,11 @@
-import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises'
+import { readFile, writeFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseDriver } from '../drivers/interface.js'
 import { SchemaIntrospector } from './schema-introspector.js'
 import type { TableInfo, ColumnInfo } from '../lib/types.js'
 import { escapeValue, quoteIdentifier, assertSafeIdentifier } from '../utils/sql-escape.js'
 import { assertSafePath } from '../utils/path-guard.js'
+import { ensureProjectStorage } from '../utils/project-storage.js'
 
 export interface DumpOptions {
   /** Incluir estructura (CREATE TABLE, indices, FKs) */
@@ -29,9 +30,11 @@ export interface DumpResult {
 const MAX_DUMP_ROWS = 500_000
 
 export class DumpManager {
+  private readonly projectDir: string
   private readonly dumpDir: string
 
   constructor(projectDir: string) {
+    this.projectDir = projectDir
     this.dumpDir = join(projectDir, '.database-mcp', 'dumps')
   }
 
@@ -39,7 +42,7 @@ export class DumpManager {
    * Genera un dump SQL de la base de datos.
    */
   async dump(driver: DatabaseDriver, connName: string, options: DumpOptions): Promise<DumpResult> {
-    await mkdir(this.dumpDir, { recursive: true })
+    await ensureProjectStorage(this.projectDir, 'dumps')
 
     // Obtener tablas con esquema completo
     const allTables = await SchemaIntrospector.getTables(driver, {

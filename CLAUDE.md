@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 27 tools, 157 tests.
+MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), connection management, schema introspection, query execution with rollback and history, database dump/restore. 27 tools, 163 tests.
 
 ## Token-optimized query results (v0.3+)
 
@@ -64,7 +64,8 @@ src/
 │   ├── sql-classifier.ts     # classifySql() → read/write/ddl
 │   ├── sql-parser-light.ts   # extractTableAndWhere() for rollback
 │   ├── result-formatter.ts   # formatQueryResult() with 25KB truncation
-│   └── gitignore-checker.ts  # Auto-add .database-mcp/ to .gitignore
+│   ├── gitignore-checker.ts  # Add .database-mcp/ to .gitignore
+│   └── project-storage.ts    # Lazy mkdir of {projectDir}/.database-mcp/ + gitignore
 ├── types/                # Module declarations for optional deps
 │   ├── sql.js.d.ts
 │   ├── postgres.d.ts
@@ -82,6 +83,7 @@ src/
 - **Error handling**: Return `{ isError: true }`, never throw from tool handlers
 - **Logging**: ONLY `console.error()` — stdout is reserved for JSON-RPC
 - **Storage**: Split — global connections in `~/.database-mcp/`, per-project history+rollbacks in `{projectDir}/.database-mcp/`
+- **Lazy project storage**: `ensureProjectStorage()` creates `{projectDir}/.database-mcp/` and patches `.gitignore` only on the first actual write (history, rollback, dump) — never at server startup
 - **Confirm pattern**: Destructive tools (conn_delete, rollback_apply) require `confirm: true` parameter
 - **Dynamic drivers**: `import('postgres')` / `import('mysql2/promise')` / `import('sql.js')` at runtime
 - **SQL classification**: Strip comments/strings first, match first keyword → read/write/ddl
@@ -97,7 +99,7 @@ src/
 └── project-conn/
     └── {project-hash}              # Per-project active connection
 
-{projectDir}/.database-mcp/         # Per-project (auto-gitignored)
+{projectDir}/.database-mcp/         # Per-project (created on first write, then auto-gitignored)
 ├── history.json                    # Query history (DATABASE_MCP_MAX_HISTORY, default 5000)
 ├── rollbacks.json                  # Pre-mutation snapshots (DATABASE_MCP_MAX_ROLLBACKS, default 1000)
 └── dumps/                          # Database dumps (SQL files)
@@ -107,7 +109,7 @@ src/
 ## Commands
 
 ```bash
-npm test          # Run all tests (98)
+npm test          # Run all tests (163)
 npm run build     # Build with tsup
 npm run typecheck # TypeScript check
 npm run lint      # ESLint

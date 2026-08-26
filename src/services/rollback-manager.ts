@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, unlink } from 'node:fs/promises'
+import { readFile, writeFile, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseDriver } from '../drivers/interface.js'
 import type { RollbackSnapshot, QueryResult } from '../lib/types.js'
@@ -6,14 +6,17 @@ import { extractTableAndWhere } from '../utils/sql-parser-light.js'
 import { classifySql } from '../utils/sql-classifier.js'
 import { escapeValue, quoteIdentifier, assertSafeIdentifier } from '../utils/sql-escape.js'
 import { assertSafePath } from '../utils/path-guard.js'
+import { ensureProjectStorage } from '../utils/project-storage.js'
 
 const SNAPSHOT_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/
 
 export class RollbackManager {
+  private readonly projectDir: string
   private readonly rollbackDir: string
   private maxSnapshots = 1000
 
   constructor(projectDir: string) {
+    this.projectDir = projectDir
     this.rollbackDir = join(projectDir, '.database-mcp', 'rollbacks')
   }
 
@@ -31,7 +34,7 @@ export class RollbackManager {
     connection: string,
     driver: DatabaseDriver,
   ): Promise<string> {
-    await mkdir(this.rollbackDir, { recursive: true })
+    await ensureProjectStorage(this.projectDir, 'rollbacks')
 
     const sqlType = classifySql(sql)
     const parsed = extractTableAndWhere(sql)
