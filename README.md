@@ -42,7 +42,7 @@ An open-source MCP server for exploring and querying **PostgreSQL, MySQL, and SQ
 
 ### Start with a development database
 
-The server requires Node.js 20.0.0 or later at runtime. Developing and running the test suite requires Node.js **20.19+ within 20.x, 22.12+ within 22.x, or 24+**: the Vite and Vitest versions used by the development toolchain do not support Node 21 or 23. These development requirements are separate from the server runtime requirement.
+The server requires Node.js 20.0.0 or later at runtime. Developing and running the test suite requires Node.js **20.19+ within 20.x, 22.13+ within 22.x, or 24+**: the development toolchain does not support Node 21 or 23. These development requirements are separate from the server runtime requirement.
 
 With Claude Code:
 
