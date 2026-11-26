@@ -1,3 +1,5 @@
+![Database MCP — Your databases, one conversation away](https://raw.githubusercontent.com/cocaxcode/database-mcp/master/assets/social-preview.png)
+
 <p align="center">
   <h1 align="center">@cocaxcode/database-mcp</h1>
   <p align="center">
