@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cocaxcode/database-mcp",
-  "description": "MCP server for database connectivity. Multi-DB (PostgreSQL, MySQL, SQLite), 19 tools.",
+  "description": "MCP server for database connectivity with PostgreSQL, MySQL and SQLite.",
   "repository": {
     "url": "https://github.com/cocaxcode/database-mcp",
     "source": "github"
   },
-  "version": "0.1.14",
+  "version": "0.3.6",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@cocaxcode/database-mcp",
-      "version": "0.1.14",
-      "runtime": "node",
+      "version": "0.3.6",
+      "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
       }
