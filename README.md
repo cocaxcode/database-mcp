@@ -29,13 +29,42 @@
 
 ## Quick Overview
 
-The most complete MCP server for databases. 33 tools across 3 engines (PostgreSQL, MySQL, SQLite), with connection groups, named connection management, automatic rollback, dump/restore, schema auto-discovery via MCP Resources, and full query history — all from natural language.
+An open-source MCP server for exploring and querying **PostgreSQL, MySQL, and SQLite** from Claude Code, Cursor, and other MCP clients. Discover a schema, ask questions across related tables, and keep named connections organised by project directory.
+
+| What you need | What to ask your assistant |
+|---|---|
+| Understand a new database | "Show the tables and the foreign keys for orders" |
+| Query related data | "Show the last 10 orders with the customer name" |
+| Separate projects | "Create a connection group scoped to this directory" |
+| Inspect previous work | "Show today's query history for my dev connection" |
+
+### Start with a development database
+
+Requires Node.js 20+ and Claude Code:
+
+```bash
+claude mcp add --scope user database -- npx -y @cocaxcode/database-mcp@latest
+```
+
+See [driver installation](#driver-installation) for engine-specific setup. Restart or reconnect your client if needed, then ask:
+
+```text
+Use database to create a group scoped to this project directory.
+Help me configure a read-only connection to my development database.
+List its tables, then show the columns and foreign keys for a table I choose.
+```
+
+Use a database account with only the permissions you need. **Start read-only; rollback snapshots are not a substitute for backups.** DDL cannot be automatically undone, and snapshot capture can fail or be incomplete. Your AI client may send query results and schema information to its model provider; a locally running MCP server does not make the whole AI workflow offline.
+
+Found it useful? [Star the repository](https://github.com/cocaxcode/database-mcp), or [share a reproducible issue](https://github.com/cocaxcode/database-mcp/issues) to help improve it.
+
+[Database MCP on Glama](https://glama.ai/mcp/servers/cocaxcode/database-mcp)
 
 This is not just a query runner. It is a full database workbench: organize connections into groups scoped to your project directories, set defaults that persist between sessions, introspect schemas at three levels of detail, get pre-mutation snapshots on every write, undo mistakes with reverse SQL, dump and restore entire databases, and track every query you run — per project, per connection.
 
 Every connection belongs to a group. Groups have scopes (directories), a default connection, and an active connection. When you work inside a scoped directory, you only see that group's connections — no clutter, no confusion.
 
-You describe what you need. The AI reads your schema, writes the SQL, and executes it safely — with automatic LIMIT injection, pre-mutation snapshots, and confirmation before destructive operations. No cloud accounts, no ORMs, no config files. Credentials never leave your machine. Everything runs locally.
+You describe what you need. The AI can read your schema, write SQL, and execute it with safeguards including automatic LIMIT injection, snapshot capture, and confirmation before destructive operations. Connection configuration is stored locally; database connections and your AI client's model calls may use the network. Review generated SQL and permissions before enabling writes.
 
 Works with **Claude Code**, **Claude Desktop**, **Cursor**, **Windsurf**, **VS Code**, **Codex CLI**, **Gemini CLI**, and any MCP-compatible client.
 
@@ -260,7 +289,7 @@ Now each directory has its own isolated set of connections.
 
 ### Rollback snapshots
 
-Every mutation captures a pre-state snapshot. Undo anything.
+The server attempts to capture snapshots for reversing supported mutations. This is best-effort recovery, not a transaction rollback or a backup: DDL is not reversible, UPDATE/DELETE snapshots capture at most 10,000 rows, and parsing or capture failures can leave insufficient data to undo a change. Review the snapshot before applying reverse SQL, especially if other clients have changed the database since the original operation.
 
 ```
 "Show me available rollbacks"
